@@ -21,12 +21,30 @@
 
 #ifndef _COTEST_H
 	#define _COTEST_H
+	
+	#define large_malloc(s) (malloc(((int)(s/4096)+1)*4096))
+	#define A_C_R     "\x1b[31m"
+	#define A_C_G   "\x1b[32m"
+	#define A_C_Y  "\x1b[33m"
+	#define A_C_B    "\x1b[34m"
+	#define A_C_M "\x1b[35m"
+	#define A_C_C    "\x1b[36m"
+	#define A_C__   "\x1b[0m"
+	
+	#define cr_printf(fmt, ...) printf("%s" fmt "%s", A_C_R, ##__VA_ARGS__, A_C__)
+	#define cg_printf(fmt, ...) printf("%s" fmt "%s", A_C_G, ##__VA_ARGS__, A_C__)
+	#define cy_printf(fmt, ...) printf("%s" fmt "%s", A_C_Y, ##__VA_ARGS__, A_C__)
+	#define cb_printf(fmt, ...) printf("%s" fmt "%s", A_C_B, ##__VA_ARGS__, A_C__)
+	#define cm_printf(fmt, ...) printf("%s" fmt "%s", A_C_M, ##__VA_ARGS__, A_C__)
+	#define cc_printf(fmt, ...) printf("%s" fmt "%s", A_C_C, ##__VA_ARGS__, A_C__)
+	
 time_t timer;
 
 typedef struct{
 	lua_State *L;
 	//int ref;
 	void *next;
+	char z[12]; /// size align
 } cosocket_swop_t;
 
 typedef struct{
@@ -34,14 +52,17 @@ typedef struct{
 	void *next;
 	int buf_size;
 	int buf_len;
+	char z[2]; /// size align
 } cosocket_link_buf_t;
 
-typedef struct{
+typedef struct {
+	int type;
 	int fd;
 	int status;
 	void *ptr;
 	lua_State *L;
 	const u_char *send_buf;
+	u_char _send_buf[3908];// with size align / 60
 	size_t send_buf_len;
 	size_t send_buf_ed;
 	u_char *send_buf_need_free;
@@ -55,7 +76,7 @@ typedef struct{
 	int timeout;
 	int dns_tid;
 	int dns_query_fd;
-	char dns_query_name[60];
+	char dns_query_name[60];// with size align / 60
 	int connect_to_port;
 	
 	int ref;

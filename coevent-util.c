@@ -255,6 +255,8 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 	}
 	return 1;
 }
+
+#define	NTOHS(p)	(((p)[0] << 8) | (p)[1])
 void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char *pkt, int len)
 {
 	//printf("parse_dns_result\n");
@@ -263,14 +265,14 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 	
 	const unsigned char	*p, *e, *s;
 	dns_query_header_t *header = NULL;
-//    pthread_t download_page_thread;
 
-	uint16_t    type;
-	int			found, stop, dlen, nlen, i;
+	uint16_t type;
+	int found = 0, stop, dlen, nlen, i;
+	int err = 0;
 
 	header = (dns_query_header_t*) pkt;
 	if (ntohs(header->nqueries) != 1)
-		return;
+		err = 1;
     //p_host = hostent_index[header->tid];
 	if(header->tid != cok->dns_tid){
 		printf("error dns tid !!!!!!!!!!!\n");
@@ -278,57 +280,57 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 	}
 
 	/* Skip host name */
-	for (e = pkt + len, nlen = 0, s = p = &header->data[0];
-	    p < e && *p != '\0'; p++)
-		nlen++;
-
-#define	NTOHS(p)	(((p)[0] << 8) | (p)[1])
+	if(err == 0)
+		for (e = pkt + len, nlen = 0, s = p = &header->data[0];
+			p < e && *p != '\0'; p++)
+			nlen++;
 
 	/* We sent query class 1, query type 1 */
 	if (&p[5] > e || NTOHS(p + 1) != 0x01)
-		return;
+		err = 1;
 
-	/* Go to the first answer section */
-	p += 5;
 	struct in_addr ips[10];
-	/* Loop through the answers, we want A type answer */
-	for (found = stop = 0; !stop && &p[12] < e; ) {
+	/* Go to the first answer section */
+	if(err == 0){
+		p += 5;
+		/* Loop through the answers, we want A type answer */
+		for (found = stop = 0; !stop && &p[12] < e; ) {
 
-		/* Skip possible name in CNAME answer */
-		if (*p != 0xc0) {
-			while (*p && &p[12] < e)
-				p++;
-			p--;
-		}
+			/* Skip possible name in CNAME answer */
+			if (*p != 0xc0) {
+				while (*p && &p[12] < e)
+					p++;
+				p--;
+			}
 
-		type = htons(((uint16_t *)p)[1]);
+			type = htons(((uint16_t *)p)[1]);
 
-		if (type == 5) 
-		{
-			/* CNAME answer. shift to the next section */
-			dlen = htons(((uint16_t *) p)[5]);
-			p += 12 + dlen;
-		} 
-		else if (type == 0x01) 
-		{
+			if (type == 5) 
+			{
+				/* CNAME answer. shift to the next section */
+				dlen = htons(((uint16_t *) p)[5]);
+				p += 12 + dlen;
+			} 
+			else if (type == 0x01) 
+			{
 
-            dlen = htons(((uint16_t *) p)[5]);
-		    p += 12;
+				dlen = htons(((uint16_t *) p)[5]);
+				p += 12;
 
-		    if (p + dlen <= e) 
-		    {
-                memcpy(&ips[found], p, dlen); 
-		    }
-            p += dlen;
-            if(++found == header->nanswers) stop = 1;
-            if(found>=10)break;
-		}
-		else
-		{
-			stop = 1;
+				if (p + dlen <= e) 
+				{
+					memcpy(&ips[found], p, dlen); 
+				}
+				p += dlen;
+				if(++found == header->nanswers) stop = 1;
+				if(found>=10)break;
+			}
+			else
+			{
+				stop = 1;
+			}
 		}
 	}
-
     //printf("find a url:%s=>", p_host->name);
     if(found > 0){
 		setnonblocking(cok->fd);
@@ -349,7 +351,10 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 		if(ret == 0){
 			///////// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! connected /////
 		}
-	}else{
+		return;
+	}
+	
+	{
 		epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
 //printf("0x%x close fd %d   l:%d\n", cok->L, cok->fd, __LINE__);
 		close(cok->fd);
@@ -363,10 +368,6 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 			lua_pop(cok->L, -1);
 		}
 	}
-    //p_host->is_dns = 1;
-
-//    pthread_create(&download_page_thread, NULL, download_page, p_host);
-
 }
 
 static struct hostent* localhost_ent = NULL;
@@ -406,7 +407,7 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 				}
 			}
 			if(is_localhost){
-				if(localhost_ent==NULL)localhost_ent = malloc(sizeof(struct hostent));
+				if(localhost_ent==NULL)localhost_ent = malloc(sizeof(struct hostent));// size 32 ,and sizeof(cosocket_swop_t) == 32
 				memcpy(localhost_ent, phost, sizeof(struct hostent));
 			}
 		}
@@ -940,7 +941,7 @@ int lua_f_base64encode(lua_State *L){
 		src = luaL_checklstring(L, 1, &slen);
 	}
 
-	char *end = malloc(base64_encoded_length(slen));
+	char *end = large_malloc(base64_encoded_length(slen));
 	int nlen = base64encode(end, src, slen);
 	lua_pushlstring(L, end, nlen);
 	free(end);
@@ -955,7 +956,7 @@ int lua_f_base64decode(lua_State *L){
 		src = luaL_checklstring(L, 1, &slen);
 	}
 
-	char *end = malloc(base64_decoded_length(slen));
+	char *end = large_malloc(base64_decoded_length(slen));
 	int nlen = base64decode(end, src, slen);
 	lua_pushlstring(L, end, nlen);
 	free(end);
