@@ -116,7 +116,7 @@ local function _multi_get(self, keys)
     local results = {}
 
     while true do
-        local line, err = sock:receive()
+        local line, err = sock:receive('*l')
         if not line then
             return nil, err
         end
@@ -164,7 +164,7 @@ function get(self, key)
         return nil, nil, "failed to send command: " .. (err or "")
     end
 
-    local line, err = sock:receive()
+    local line, err = sock:receive('*l')
     if not line then
         return nil, nil, "failed to receive 1st line: " .. (err or "")
     end
@@ -190,7 +190,7 @@ function get(self, key)
         return nil, nil, "failed to receive CRLF: " .. (err or "")
     end
 
-    line, err = sock:receive() -- discard "END\r\n"
+    line, err = sock:receive('*l') -- discard "END\r\n"
     if not line then
         return nil, nil, "failed to receive END CRLF: " .. (err or "")
     end
@@ -231,7 +231,7 @@ local function _multi_gets(self, keys)
     local results = {}
 
     while true do
-        local line, err = sock:receive()
+        local line, err = sock:receive('*l')
         if not line then
             return nil, err
         end
@@ -281,7 +281,7 @@ function gets(self, key)
         return nil, nil, err
     end
 
-    local line, err = sock:receive()
+    local line, err = sock:receive('*l')
     if not line then
         return nil, nil, nil, err
     end
@@ -307,7 +307,7 @@ function gets(self, key)
         return nil, nil, nil, err
     end
 
-    line, err = sock:receive() -- discard "END\r\n"
+    line, err = sock:receive('*l') -- discard "END\r\n"
     if not line then
         return nil, nil, nil, err
     end
@@ -357,7 +357,7 @@ local function _store(self, cmd, key, value, exptime, flags)
         return nil, err
     end
 
-    local data, err = sock:receive()
+    local data, err = sock:receive('*l')
     if not data then
         return nil, err
     end
@@ -420,7 +420,7 @@ function cas(self, key, value, cas_uniq, exptime, flags)
         return nil, err
     end
 
-    local line, err = sock:receive()
+    local line, err = sock:receive('*l')
     if not line then
         return nil, err
     end
@@ -450,7 +450,7 @@ function delete(self, key)
         return nil, err
     end
 
-    local res, err = sock:receive()
+    local res, err = sock:receive('*l')
     if not res then
         return nil, err
     end
@@ -501,7 +501,7 @@ function flush_all(self, time)
         return nil, err
     end
 
-    local res, err = sock:receive()
+    local res, err = sock:receive('*l')
     if not res then
         return nil, err
     end
@@ -527,7 +527,7 @@ local function _incr_decr(self, cmd, key, value)
         return nil, err
     end
 
-    local line, err = sock:receive()
+    local line, err = sock:receive('*l')
     if not line then
         return nil, err
     end
@@ -570,7 +570,7 @@ function stats(self, args)
 
     local lines = {}
     while true do
-        local line, err = sock:receive()
+        local line, err = sock:receive('*l')
         if not line then
             return nil, err
         end
@@ -602,7 +602,7 @@ function version(self)
         return nil, err
     end
 
-    local line, err = sock:receive()
+    local line, err = sock:receive('*l')
     if not line then
         return nil, err
     end
@@ -642,7 +642,7 @@ function verbosity(self, level)
         return nil, err
     end
 
-    local line, err = sock:receive()
+    local line, err = sock:receive('*l')
     if not line then
         return nil, err
     end
@@ -667,7 +667,7 @@ function touch(self, key, exptime)
         return nil, err
     end
 
-    local line, err = sock:receive()
+    local line, err = sock:receive('*l')
     if not line then
         return nil, err
     end

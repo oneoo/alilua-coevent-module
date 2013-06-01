@@ -566,8 +566,20 @@ int chk_do_timeout_link(int epoll_fd){
 				lua_pushstring(cok->L, "timeout!");
 				int ret = lua_resume(cok->L, 2);
 				if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
-					printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
-					lua_pop(cok->L, -1);
+					//printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
+					//lua_pop(cok->L, -1);
+					
+					if(lua_gettop(cok->L) > 1){
+						lua_replace(cok->L, 2);
+						lua_pushnil(cok->L);
+						lua_replace(cok->L, 1);
+						lua_settop(cok->L, 2);
+					}else{
+						lua_pushnil(cok->L);
+						lua_replace(cok->L, 1);
+					}
+					//lua_pushvalue(cok->L, -1);
+					lua_f_coroutine_resume_waiting(cok->L);
 				}
 						
 			}

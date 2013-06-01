@@ -73,6 +73,8 @@ typedef struct {
 	size_t total_buf_len;
 	size_t buf_read_len;
 	
+	size_t readed;
+	
 	int timeout;
 	int dns_tid;
 	int dns_query_fd;
@@ -103,6 +105,7 @@ typedef struct{
 int setnonblocking(int fd);
 int add_to_timeout_link(cosocket_t *cok, int timeout);
 int del_in_timeout_link(cosocket_t *cok);
+int lua_f_coroutine_resume_waiting(lua_State *L);
 int chk_do_timeout_link(int epoll_fd);
 void add_dns_cache(const char *name, struct in_addr addr, int do_recache);
 int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name);

@@ -6,6 +6,9 @@ local mysql = require "mysql"
 local cjson = require "cjson"
 local db = mysql:new()
 
+local memcached = require "memcached"
+local memc = memcached:new()
+
 function test_mysql()
 	local db_ok, err, errno, sqlstate = db:connect({
 					host = "localhost",
@@ -52,25 +55,65 @@ print('used:'..((longtime()-st)/1000))
 	print('test_mysql ended')
 end
 
+function test_memcached()
+	local ok, err = memc:connect("localhost", 11211)
+	if not ok then
+		print("failed to connect: ", err)
+		return
+	end
+
+	local ok, err = memc:flush_all()
+	if not ok then
+		print("failed to flush all: ", err)
+		--return
+	end
+
+	print("flush: ", ok);
+	
+	local ok, err = memc:set("dog", 32)
+	if not ok then
+		print("failed to set dog: ", '['..err..']')
+		return
+	end
+
+	local t = longtime()
+	for i = 1, 20 do
+		swop()
+		local res, flags, err = memc:get("dog")
+		if err then
+			print("failed to get dog: ", '['..err..']')
+			return
+		end
+
+		if not res then
+			print("dog not found")
+			return
+		end
+
+		print("dog: ", res, " (flags: ", flags, ")")
+	end
+	print('times:', (longtime()-t)/1000)
+end
+
 function test_http_client(id, host, uri)
-	print('start test_http_client', id, host, uri)
+	--print('start test_http_client', id, host, uri)
 	local cok = cosocket.tcp()
 	local r,e = cok:connect(host, 80)
 
-	if not r then print(e) return end
-	print('----------------------------------------connected!!!', id)
+	if not r then print(e) return false end
+	--print('----------------------------------------connected!!!', id)
 	
 	if not uri then
 		cok:send('GET / HTTP/1.1\r\nHost: '..host..'\r\nUser-Agent: Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.7.6)\r\n')
 	else
 		cok:send('GET '..uri..' HTTP/1.1\r\nHost: '..host..'\r\nUser-Agent: Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.7.6)\r\n')
 	end
-	if not cok:send('Connection: close\r\n\r\n') then print('send error') return end
+	if not cok:send('Connection: close\r\n\r\n') then print('send error') return false end
 	
 	local s,e,oss,oss2,oss3,oss4,kc
 	kc = 0
 	while 1 do
-		--swop()
+		swop()
 		oss4 = oss3
 		oss3 = oss2
 		oss2 = oss
@@ -80,7 +123,7 @@ function test_http_client(id, host, uri)
 		--print(id, s)
 		--print(id,'read ', s and #s or -1)
 		if not s then 
-			print(id, e, s, kc)
+			--print(id, e, s, kc)
 		break end
 	end
 
@@ -93,14 +136,15 @@ function test_http_client(id, host, uri)
 	cok:close()
 	cok = nil
 --print(oss)
-	print('test_http_client ended', id, (oss:find('</html>') or oss:find('2006')) and true or false, oss)
+	--print('test_http_client ended', id, (oss:find('</html>') or oss:find('2006')) and true or false, oss)
 	if not e and not s then os.exit(1) end
 	return id, (oss:find('</html>') or oss:find('2006')) and true or false, kc
 end
 --collectgarbage('stop')
 
 local af = function()
-	--coroutine_wait(newthread(test_mysql))
+	coroutine_wait(newthread(test_mysql))
+	coroutine_wait(newthread(test_memcached))
 	
 	--coroutine_wait(newthread(test_http_client, 0, 'wiki.upyun.com', '/index.php?title=%E9%A6%96%E9%A1%B5'))
 	local t = longtime()
@@ -142,7 +186,7 @@ local af = function()
 	
 end
 
-for u = 1,10000 do
+for u = 1,1 do
 	L(af)
 end
 

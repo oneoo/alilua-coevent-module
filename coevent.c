@@ -174,7 +174,7 @@ int lua_co_read_(cosocket_t *cok){
 	if(cok->status == 0){
 //printf("%d %d\n", be_copy, cok->total_buf_len);
 		if(be_copy > cok->total_buf_len)
-		be_copy = cok->total_buf_len;
+			be_copy = cok->total_buf_len;
 	}
 
 	int kk = 0;
@@ -189,18 +189,18 @@ int lua_co_read_(cosocket_t *cok){
 		cosocket_link_buf_t *bf = NULL;
 		
 		while(cok->read_buf){
-			this_copy_len = cok->read_buf->buf_len+copy_ed > copy_len ? copy_len - copy_ed : cok->read_buf->buf_len;
-//printf("copy_ed %d\n", copy_ed);
+			this_copy_len = (cok->read_buf->buf_len+copy_ed > copy_len ? copy_len - copy_ed : cok->read_buf->buf_len);
 			//luaL_addlstring(&b, cok->read_buf->buf, this_copy_len);
-			memcpy(buf2lua+copy_ed, cok->read_buf->buf, this_copy_len);
-			copy_ed += this_copy_len;
-//printf("%d %d %ld\n", cok->read_buf->buf_len, this_copy_len, be_copy+(4096-be_copy%4096));
-//printf("total %d copy_ed %d\n", cok->total_buf_len, this_copy_len);
-			if(this_copy_len < cok->read_buf->buf_size && this_copy_len > 0){ /// not empty
-				//memcpy(cok->read_buf->buf, cok->read_buf->buf+this_copy_len, cok->read_buf->buf_len - this_copy_len);
+			if(this_copy_len > 0){
+				memcpy(buf2lua+copy_ed, cok->read_buf->buf, this_copy_len);
+				copy_ed += this_copy_len;
+				
 				memmove(cok->read_buf->buf, cok->read_buf->buf+this_copy_len, cok->read_buf->buf_len - this_copy_len);
 				cok->read_buf->buf_len -= this_copy_len;
-				
+			}
+//printf("%d %d %ld\n", cok->read_buf->buf_len, this_copy_len, be_copy+(4096-be_copy%4096));
+//printf("total %d copy_ed %d\n", cok->total_buf_len, this_copy_len);
+			if(copy_ed >= be_copy){ /// not empty
 				cok->total_buf_len -= copy_ed;
 //printf("push %d\n", be_copy);
 				//luaL_pushresult(&b);
@@ -245,7 +245,7 @@ static int lua_co_read(lua_State *L){
 		cok->L = L;
 //printf("read fd %d  total %d\n", cok->fd, cok->total_buf_len);
 		
-		cok->buf_read_len = -1; /// read line
+		cok->buf_read_len = -2; /// read line
 		if(lua_isnumber(L, 2)){
 			cok->buf_read_len = lua_tonumber(L, 2);
 			if(cok->buf_read_len < 0){
@@ -256,8 +256,8 @@ static int lua_co_read(lua_State *L){
 			}
 		}else{
 			if(lua_isstring(L, 2)){
-				if(strcmp("*a", lua_tostring(L, 2)) == 0)
-					cok->buf_read_len = -2; /// read all
+				if(strcmp("*l", lua_tostring(L, 2)) == 0)
+					cok->buf_read_len = -1; /// read all
 			}
 		}
 		
@@ -531,7 +531,7 @@ int lua_f_coroutine_resume_waiting(lua_State *L){
 			lua_xmove(L, _L, rts);
 			int ret = lua_resume(_L, rts);
 			if (ret == LUA_ERRRUN) {
-				//printf("%d isstring: %s\n", __LINE__, lua_tostring(_L, -1));
+				printf("%d isstring: %s\n", __LINE__, lua_tostring(_L, -1));
 				lua_pop(_L, -1);
 			}
 	
@@ -627,14 +627,13 @@ init_read_buf:
 				
 				if(n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)){
 					if(!del_in_timeout_link(cok)){// && cok->in_read_action == 1
-						printf("del error %d\n", __LINE__);
-						exit(1);
+						//printf("del error %d\n", __LINE__);
+						//exit(1);
 					}
+
 					{
 //printf("read ended!!!\n");
 						cok->status = 0;
-						ev.data.ptr = cok;
-						ev.events = EPOLLPRI;
 						if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev) == -1)
 							printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
 //printf("0x%x close fd %d  %d\n", cok->L, cok->fd, __LINE__);
@@ -654,7 +653,7 @@ init_read_buf:
 							ret = lua_resume(cok->L, 1);
 						}
 						if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
-							//printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
+							printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
 							//lua_pop(cok->L, -1);
 							{
 								epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
@@ -675,14 +674,13 @@ init_read_buf:
 							//lua_pushvalue(cok->L, -1);
 							lua_f_coroutine_resume_waiting(cok->L);
 						}
-						lua_gc(cok->L, LUA_GCRESTART, 0);
 					}
 //printf("resumed %d\n", status);
 				}else{
 //printf("[[%s]]\n", cok->last_buf->buf);
 					if(cok->in_read_action == 1){
 						int rt = lua_co_read_(cok);
-						if(rt > 0){lua_gc(cok->L, LUA_GCSTOP, 0);
+						if(rt > 0){
 							cok->in_read_action = 0;
 							if(!del_in_timeout_link(cok)){
 								printf("del error %d\n", __LINE__);
@@ -696,7 +694,7 @@ init_read_buf:
 							//luaL_unref(cok->L, LUA_REGISTRYINDEX, cok->ref);
 							int ret = lua_resume(cok->L, rt);
 							if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
-								//printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
+								printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
 								//lua_pop(cok->L, -1);
 								{
 									epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
@@ -719,7 +717,7 @@ init_read_buf:
 								lua_f_coroutine_resume_waiting(cok->L);
 							}
 						}
-					}else{printf("aaaaa\n");}
+					}//else{printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!aaaaa\n");}
 				}
 			}else if(events[i].events & EPOLLOUT){
 //printf("0x%x fd:%d EPOLLOUT %d\n", cok->L, cok->fd, cok->status);
@@ -746,7 +744,7 @@ init_read_buf:
 						lua_pushstring(cok->L, "Connect error!");
 						int ret = lua_resume(cok->L, 2);
 						if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
-							//printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
+							printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
 							//lua_pop(cok->L, -1);
 							if(lua_gettop(cok->L) > 1){
 								lua_replace(cok->L, 2);
@@ -775,7 +773,7 @@ init_read_buf:
 						lua_pushboolean(cok->L, 1);
 						int ret = lua_resume(cok->L, 1);
 						if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
-							//printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
+							printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
 							//lua_pop(cok->L, -1);
 							if(lua_gettop(cok->L) > 1){
 								lua_replace(cok->L, 2);
@@ -807,7 +805,7 @@ init_read_buf:
 							cok->send_buf_ed = 0;
 						}else{
 							ev.data.ptr = cok;
-							ev.events = EPOLLPRI;
+							ev.events = EPOLLIN;
 							if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, cok->fd, &ev) == -1)
 								printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
 						}
@@ -831,7 +829,7 @@ init_read_buf:
 							lua_pushboolean(cok->L, 0);
 						int ret = lua_resume(cok->L, 1);
 						if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
-							//printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
+							printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
 							//lua_pop(cok->L, -1);
 							if(lua_gettop(cok->L) > 1){
 								lua_replace(cok->L, 2);
@@ -863,7 +861,7 @@ printf("fd:%d other\n", cok->fd);
 				lua_pushstring(cok->L, "Connect error!");
 				int ret = lua_resume(cok->L, 2);
 				if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
-					//printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
+					printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
 					//lua_pop(cok->L, -1);
 					if(lua_gettop(cok->L) > 1){
 						lua_replace(cok->L, 2);
@@ -913,7 +911,7 @@ printf("fd:%d other\n", cok->fd);
 				if (ret == LUA_ERRRUN && lua_isstring(L, -1)) {
 					//printf("%d isstring: %s\n", __LINE__, lua_tostring(L, -1));
 					lua_pop(L, -1);
-					lua_f_coroutine_resume_waiting(cok->L);
+					lua_f_coroutine_resume_waiting(L);
 				}
 			}
 			//printf("b\n");
