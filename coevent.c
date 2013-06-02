@@ -69,10 +69,6 @@ static int lua_co_connect(lua_State *L){
 			lua_pushstring(L, "Init socket error!");
 			return 2;
 		}
-//printf("0x%x %s connect fd %d\n", L, lua_tostring(L, 2), cok->fd);
-		
-		//cok->ref = luaL_ref(L, LUA_REGISTRYINDEX);
-//printf("ref %d\n",cok->ref);
 	}
 
 	return lua_yield(L, 0);
@@ -118,15 +114,12 @@ static int lua_co_send(lua_State *L){
 			lua_pushstring(L, "content empty!");
 			return 2;
 		}
-//printf("lua send:%d\n", cok->send_buf_len);
 		
 		struct epoll_event ev;
 		ev.data.ptr = cok;
 		ev.events = EPOLLOUT;
 		if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, cok->fd, &ev) == -1)
 			printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
-		
-		//cok->ref = luaL_ref(L, LUA_REGISTRYINDEX);
 		
 		add_to_timeout_link(cok, cok->timeout);
 	}
@@ -243,7 +236,6 @@ static int lua_co_read(lua_State *L){
 			return 2;
 		}
 		cok->L = L;
-//printf("read fd %d  total %d\n", cok->fd, cok->total_buf_len);
 		
 		cok->buf_read_len = -2; /// read line
 		if(lua_isnumber(L, 2)){
@@ -280,8 +272,6 @@ static int lua_co_read(lua_State *L){
 			ev.events = EPOLLIN;
 			if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, cok->fd, &ev) == -1)
 				printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
-			
-			//cok->ref = luaL_ref(L, LUA_REGISTRYINDEX);
 		}
 		add_to_timeout_link(cok, cok->timeout);
 	}
@@ -312,7 +302,7 @@ static int _lua_co_close(lua_State *L, cosocket_t *cok){
 		struct epoll_event ev;
 		epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
 	}
-//printf("0x%x close fd %d   l:%d\n", L, cok->fd, __LINE__);
+
 	close(cok->fd);
 	cok->fd = -1;
 }
@@ -426,51 +416,6 @@ static int lua_co_tcp(lua_State *L){
 	lua_setmetatable(L, -2);
 }
 
-/*
-lua_State *joined[100][10];
-lua_State *joined_resume[100][10];
-int joined_resume_ref[100][10];
-static uint32_t fnv1_64_ptr(void *d) {
-	char data[20];
-	int len = sprintf(data, "%x", d);
-	uint64_t rv = 0xcbf29ce484222325UL;
-	uint32_t i;
-	for (i = 0; i < len; i++) {
-	rv = (rv * 1099511628211UL) ^ (unsigned char)data[i];
-	}
-	return (uint32_t)rv;
-}
-int lua_f_coroutine_wait(lua_State *L){
-	if(!lua_isthread(L, 1))return 0;
-	
-	lua_State *JL = lua_tothread(L, 1);
-	if(lua_status(JL) != LUA_YIELD)return 0;
-
-	int b = fnv1_64_ptr(JL)%100;
-	int i = 0;
-	for(i=0;i<10;i++){
-		if(joined_resume[b][i] == NULL)break;
-	}
-	if(joined_resume[b][i] != NULL)return 0;
-//printf("JD at %d\n", i);
-	joined[b][i] = JL;
-	joined_resume[b][i] = L;
-	//joined_resume_ref[b][i] = luaL_ref(L, LUA_REGISTRYINDEX);
-	return lua_yield(L, 0);
-}
-int lua_f_coroutine_resume_waiting(lua_State *L){
-	int b = fnv1_64_ptr(L)%100;
-	int i = 0;
-	for(i=0;i<10;i++){
-		if(joined[b][i] == L && joined_resume[b][i]){
-			lua_State *LL = joined_resume[b][i];
-			joined_resume[b][i] = NULL;
-			//luaL_unref(LL, LUA_REGISTRYINDEX, joined_resume_ref[b][i]);
-			lua_resume(LL, 0);
-		}
-	}
-}*/
-
 int swop_counter = 0;
 cosocket_swop_t *swop_top = NULL;
 cosocket_swop_t *swop_lat = NULL;
@@ -492,10 +437,8 @@ int lua_f_coroutine_wait(lua_State *L){
 		char key[32];
 		sprintf(key,"%x__be_resume", JL);
 		lua_pushlightuserdata(JL, L);
-		//lua_pushthread(JL);
 		lua_setglobal(JL, key);
 		lua_pop(L, 1);
-		//int ref = luaL_ref(L, LUA_REGISTRYINDEX);
 	}
 	return lua_yield(L, 0);
 }
@@ -510,7 +453,6 @@ int lua_f_coroutine_resume_waiting(lua_State *L){
 			exit(1);
 		}
 		swop->L = L;
-		//swop->ref = luaL_ref(L, LUA_REGISTRYINDEX);
 		swop->next = NULL;
 		if(swop_lat != NULL){
 			swop_lat->next = swop;
@@ -542,7 +484,7 @@ int lua_f_coroutine_resume_waiting(lua_State *L){
 }
 
 int lua_f_coroutine_swop(lua_State *L){
-	if(swop_counter++ < 10){
+	if(swop_counter++ < 100){
 		lua_pushboolean(L, 0);
 		return 1;
 	}
@@ -555,7 +497,6 @@ int lua_f_coroutine_swop(lua_State *L){
 	swop_counter = 0;
 	
 	swop->L = L;
-	//swop->ref = luaL_ref(L, LUA_REGISTRYINDEX);
 	swop->next = NULL;
 	
 	if(swop_lat != NULL){
@@ -564,7 +505,7 @@ int lua_f_coroutine_swop(lua_State *L){
 		swop_top->next = swop;
 	}
 	swop_lat = swop;
-	//printf("yield\n");
+
 	return lua_yield(L, 0);
 }
 
@@ -582,7 +523,6 @@ int epoll_worker(){
 		nfds = epoll_wait(epoll_fd, events, 128, 10);
 		io_counts+=nfds;
 		swop_counter = swop_counter/2;
-		//if(nfds==0)printf("wait...\n");
 		
 		for(i=0; i<nfds; i++){
 			cok = events[i].data.ptr;
@@ -599,10 +539,8 @@ int epoll_worker(){
 				continue;
 			}
 			if(events[i].events & EPOLLIN){
-//printf("fd:%d EPOLLIN\n", cok->fd);
 init_read_buf:
 				if(!cok->read_buf || (cok->last_buf->buf_len >= cok->last_buf->buf_size)){/// init read buf
-//printf("malloc read_buf\n");
 					cosocket_link_buf_t *nbuf = NULL;
 					nbuf = malloc(sizeof(cosocket_link_buf_t));
 					nbuf->buf = malloc(4096);
@@ -621,7 +559,6 @@ init_read_buf:
 				while((n = recv(cok->fd, cok->last_buf->buf+cok->last_buf->buf_len, cok->last_buf->buf_size-cok->last_buf->buf_len, 0)) > 0){
 					cok->last_buf->buf_len += n;
 					cok->total_buf_len += n;
-//printf("readed %d\n", cok->total_buf_len);
 					if(cok->last_buf->buf_len >= cok->last_buf->buf_size)goto init_read_buf;
 				}
 				
@@ -632,18 +569,15 @@ init_read_buf:
 					}
 
 					{
-//printf("read ended!!!\n");
 						cok->status = 0;
 						if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev) == -1)
 							printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
-//printf("0x%x close fd %d  %d\n", cok->L, cok->fd, __LINE__);
 						close(cok->fd);
 						cok->fd = -1;
 						cok->status = 0;
 					}
 					if(cok->in_read_action == 1){
 						cok->in_read_action = 0;
-						//luaL_unref(cok->L, LUA_REGISTRYINDEX, cok->ref);
 						int ret = 0;
 						int rt = lua_co_read_(cok);
 						if(rt > 0){
@@ -671,13 +605,10 @@ init_read_buf:
 								lua_pushnil(cok->L);
 								lua_replace(cok->L, 1);
 							}
-							//lua_pushvalue(cok->L, -1);
 							lua_f_coroutine_resume_waiting(cok->L);
 						}
 					}
-//printf("resumed %d\n", status);
 				}else{
-//printf("[[%s]]\n", cok->last_buf->buf);
 					if(cok->in_read_action == 1){
 						int rt = lua_co_read_(cok);
 						if(rt > 0){
@@ -691,14 +622,12 @@ init_read_buf:
 							if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, cok->fd, &ev) == -1)
 								printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));*/
 
-							//luaL_unref(cok->L, LUA_REGISTRYINDEX, cok->ref);
 							int ret = lua_resume(cok->L, rt);
 							if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 								printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
 								//lua_pop(cok->L, -1);
 								{
 									epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
-				//printf("0x%x close fd %d   l:%d\n", cok->L, cok->fd, __LINE__);
 									close(cok->fd);
 									cok->fd = -1;
 									cok->status = 0;
@@ -720,7 +649,6 @@ init_read_buf:
 					}//else{printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!aaaaa\n");}
 				}
 			}else if(events[i].events & EPOLLOUT){
-//printf("0x%x fd:%d EPOLLOUT %d\n", cok->L, cok->fd, cok->status);
 				if(cok->status == 1){
 					cok->status = 2;
 					int result = 0;
@@ -739,7 +667,6 @@ init_read_buf:
 							cok->fd = -1;
 							cok->status = 0;
 						}
-						//luaL_unref(cok->L, LUA_REGISTRYINDEX, cok->ref);
 						lua_pushnil(cok->L);
 						lua_pushstring(cok->L, "Connect error!");
 						int ret = lua_resume(cok->L, 2);
@@ -757,9 +684,7 @@ init_read_buf:
 							}
 							lua_f_coroutine_resume_waiting(cok->L);
 						}
-//printf("connect error %d\n", cok->fd);
 					}else{ /// connected
-//printf("connected\n");
 						cok->in_read_action = 0;
 						{
 							ev.data.ptr = cok;
@@ -767,9 +692,6 @@ init_read_buf:
 							if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, cok->fd, &ev) == -1)
 								printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
 						}
-//printf("connected fd %d\n", cok->fd);
-//printf("connect ok %d\n", cok->fd);
-						//luaL_unref(cok->L, LUA_REGISTRYINDEX, cok->ref);
 						lua_pushboolean(cok->L, 1);
 						int ret = lua_resume(cok->L, 1);
 						if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
@@ -798,7 +720,6 @@ init_read_buf:
 							ev.events = EPOLLPRI;
 							if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev) == -1)
 								printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
-//printf("close %d at l:%d\n", cok->fd, __LINE__);
 							close(cok->fd);
 							cok->fd = -1;
 							cok->status = 0;
@@ -820,7 +741,7 @@ init_read_buf:
 							printf("del error %d\n", __LINE__);
 							exit(1);
 						}
-						//luaL_unref(cok->L, LUA_REGISTRYINDEX, cok->ref);
+
 						if(cok->send_buf_ed == cok->send_buf_len)
 							lua_pushnumber(cok->L, cok->send_buf_ed);
 						else if(cok->fd == -1)
@@ -851,12 +772,11 @@ printf("fd:%d other\n", cok->fd);
 				del_in_timeout_link(cok);
 				{
 					epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
-//printf("0x%x close fd %d   l:%d\n", cok->L, cok->fd, __LINE__);
 					close(cok->fd);
 					cok->fd = -1;
 					cok->status = 0;
 				}
-				//luaL_unref(cok->L, LUA_REGISTRYINDEX, cok->ref);
+
 				lua_pushnil(cok->L);
 				lua_pushstring(cok->L, "Connect error!");
 				int ret = lua_resume(cok->L, 2);
@@ -896,7 +816,6 @@ printf("fd:%d other\n", cok->fd);
 		}
 		/// resume swops
 		{
-			//printf("a\n");
 			cosocket_swop_t *swop = NULL;
 			if(swop_top->next != NULL){
 				swop = swop_top->next;
@@ -905,7 +824,7 @@ printf("fd:%d other\n", cok->fd);
 				lua_State *L = swop->L;
 				free(swop);
 				swop = NULL;
-				//luaL_unref(L, LUA_REGISTRYINDEX, ref);
+
 				lua_pushboolean(L, 1);
 				int ret = lua_resume(L, 1);
 				if (ret == LUA_ERRRUN && lua_isstring(L, -1)) {
@@ -914,7 +833,6 @@ printf("fd:%d other\n", cok->fd);
 					lua_f_coroutine_resume_waiting(L);
 				}
 			}
-			//printf("b\n");
 		}
 	}
 }

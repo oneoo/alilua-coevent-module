@@ -95,12 +95,42 @@ function test_memcached()
 	print('times:', (longtime()-t)/1000)
 end
 
+local redis = require "redis"
+local red = redis:new()
+function test_redis()
+
+	red:set_timeout(1000) -- 1 sec
+
+	local ok, err = red:connect("localhost", 6379)
+	if not ok then
+		print("failed to connect: ", err)
+		return
+	end
+
+	local res, err = red:hmset("animals", "dog", "bark", "cat", "meow")
+	if not res then
+		print("failed to set animals: ", err)
+		return
+	end
+	print("hmset animals: ", res)
+
+	local res, err = red:hmget("animals", "dog", "cat")
+	if not res then
+		print("failed to get animals: ", err)
+		return
+	end
+	for k,v in pairs(res) do print(k, v) end
+	print("hmget animals: ", res)
+
+	--red:close()
+end
+
 function test_http_client(id, host, uri)
 	--print('start test_http_client', id, host, uri)
 	local cok = cosocket.tcp()
 	local r,e = cok:connect(host, 80)
 
-	if not r then print(e) return false end
+	if not r then print(1, e) return false end
 	--print('----------------------------------------connected!!!', id)
 	
 	if not uri then
@@ -145,6 +175,7 @@ end
 local af = function()
 	coroutine_wait(newthread(test_mysql))
 	coroutine_wait(newthread(test_memcached))
+	coroutine_wait(newthread(test_redis))
 	
 	--coroutine_wait(newthread(test_http_client, 0, 'wiki.upyun.com', '/index.php?title=%E9%A6%96%E9%A1%B5'))
 	local t = longtime()
@@ -153,9 +184,9 @@ local af = function()
 	--t1 = newthread(test_http_client, 1, 'www.163.com')
 	--t2 = newthread(test_http_client, 2, 'weibo.com')
 	--t3 = newthread(test_http_client, 3, 'www.163.com')
-	
+	--coroutine_wait(newthread(test_http_client, 1, 'wiki.upyun.com', '/index.php?title=%E9%A6%96%E9%A1%B5'))
 	local ts = {}
-	for i=1,10 do --swop()
+	for i=1,100 do swop()
 		table.insert(ts, newthread(test_http_client, i+100, 'wiki.upyun.com', '/index.php?title=%E9%A6%96%E9%A1%B5'))
 		--table.insert(ts, newthread(test_http_client, i+200, 'www.qq.com', '/'))
 		--table.insert(ts, newthread(test_http_client, i+300, 'news.qq.com', '/'))

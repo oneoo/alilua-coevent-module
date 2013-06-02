@@ -128,7 +128,7 @@ end
 
 
 local function _read_reply(sock)
-    local line, err = sock:receive()
+    local line, err = sock:receive('*l')
     if not line then
         return nil, err
     end

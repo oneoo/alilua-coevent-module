@@ -22,7 +22,7 @@ static inline uint32_t fnv1a_32(const char *data, uint32_t len) {
   uint32_t rv = 0x811c9dc5U;
   uint32_t i;
   for (i = 0; i < len; i++) {
-    rv = (rv ^ (unsigned char)data[i]) * PRIME32;
+	rv = (rv ^ (unsigned char)data[i]) * PRIME32;
   }
   return rv;
 }
@@ -30,7 +30,7 @@ static inline uint32_t fnv1a_64(const char *data, uint32_t len) {
   uint64_t rv = 0xcbf29ce484222325UL;
   uint32_t i;
   for (i = 0; i < len; i++) {
-    rv = (rv ^ (unsigned char)data[i]) * PRIME64;
+	rv = (rv ^ (unsigned char)data[i]) * PRIME64;
   }
   return (uint32_t)rv;
 }
@@ -162,7 +162,7 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 		if(dns_ip_count < 2){
 			dns_ip[dns_ip_count][0]=8;dns_ip[dns_ip_count][1]=8;dns_ip[dns_ip_count][2]=8;dns_ip[dns_ip_count][3]=8;dns_ip_count++;
 		}
-		//208.67.222.222
+
 		if(dns_ip_count < 2){
 			dns_ip[dns_ip_count][0]=208;dns_ip[dns_ip_count][1]=67;dns_ip[dns_ip_count][2]=222;dns_ip[dns_ip_count][3]=222;dns_ip_count++;
 		}
@@ -172,9 +172,7 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 	
 	struct epoll_event ev;
 	cok->dns_query_fd = socket(PF_INET, SOCK_DGRAM, 17);
-	
-	//printf("do_dns_query %s fd:%d\n", name, cok->dns_query_fd);
-	
+
 	if(cok->dns_query_fd < 0)
 		return 0;
 	cok->dns_tid = dns_tid;
@@ -225,8 +223,8 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 			s = name + name_len;
 
 		n = s - name;			/* Chunk length */
-		*p++ = n;			            /* Copy length */
-		for (i = 0; i < n; i++)		    /* Copy chunk */
+		*p++ = n;				/* Copy length */
+		for (i = 0; i < n; i++)	/* Copy chunk */
 			*p++ = name[i];
 
 		if (*s == '.')
@@ -239,18 +237,16 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 
 	*p++ = 0;			/* Mark end of host name */
 	*p++ = 0;			/* Well, lets put this byte as well */
-	*p++ = 1;	        /* Query Type */
+	*p++ = 1;			/* Query Type */
 
 	*p++ = 0;
 	*p++ = 1;			/* Class: inet, 0x0001 */
 
-	n = p - pkt;			/* Total packet length */
+	n = p - pkt;		/* Total packet length */
 
 	sendto(cok->dns_query_fd, pkt, n, 0, (struct sockaddr *) &dns_server2, sizeof(dns_server2));
 	if ((m = sendto(cok->dns_query_fd, pkt, n, 0, (struct sockaddr *) &dns_server, sizeof(dns_server))) != n) 
 	{
-		//printf("%s error\n", p_host->name);
-		perror("sendto error");
 		return 0;
 	}
 	return 1;
@@ -259,7 +255,6 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 #define	NTOHS(p)	(((p)[0] << 8) | (p)[1])
 void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char *pkt, int len)
 {
-	//printf("parse_dns_result\n");
 	struct epoll_event ev;
 	epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, &ev);
 	
@@ -273,7 +268,7 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 	header = (dns_query_header_t*) pkt;
 	if (ntohs(header->nqueries) != 1)
 		err = 1;
-    //p_host = hostent_index[header->tid];
+
 	if(header->tid != cok->dns_tid){
 		printf("error dns tid !!!!!!!!!!!\n");
 		exit(0);
@@ -331,8 +326,8 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 			}
 		}
 	}
-    //printf("find a url:%s=>", p_host->name);
-    if(found > 0){
+
+	if(found > 0){
 		setnonblocking(cok->fd);
 		
 		ev.data.ptr = cok;
@@ -356,7 +351,6 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 	
 	{
 		epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
-//printf("0x%x close fd %d   l:%d\n", cok->L, cok->fd, __LINE__);
 		close(cok->fd);
 		cok->fd = -1;
 		cok->status = 0;
@@ -386,7 +380,6 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 	addr.sin_addr.s_addr=inet_addr(host);//按IP初始化
 	if(addr.sin_addr.s_addr == INADDR_NONE){//如果输入的是域名
 		int is_localhost = (strcmp(host,"localhost")==0);
-		//long a = longtime();
 		struct hostent *phost = localhost_ent;
 		int in_cache = 0;
 		if(!is_localhost || localhost_ent == NULL){
@@ -411,10 +404,9 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 				memcpy(localhost_ent, phost, sizeof(struct hostent));
 			}
 		}
-		//printf("gethostbyname %ld\n", longtime()-a);
+
 		if(in_cache == 0){
 			if(phost==NULL){
-				//herror("Init socket s_addr error!");
 				close(sockfd);
 				return -2;
 			}
@@ -496,8 +488,8 @@ int del_in_timeout_link(cosocket_t *cok){
 		_tl = timeout_links[p];
 		while(_tl){
 			if(_tl->cok == cok){
-				_utl = _tl->uper; /// next
-				_ntl = _tl->next; /// next
+				_utl = _tl->uper;
+				_ntl = _tl->next;
 				if(_utl == NULL){
 					timeout_links[p] = _ntl;
 					if(_ntl != NULL)
@@ -532,9 +524,8 @@ int chk_do_timeout_link(int epoll_fd){
 		while(_tl){
 			_ttl =  _tl->next;
 			if(nt >= _tl->timeout){
-//printf("time out \n");
-				_utl = _tl->uper; /// next
-				_ntl = _tl->next; /// next
+				_utl = _tl->uper;
+				_ntl = _tl->next;
 				if(_utl == NULL){
 					timeout_links[i] = _ntl;
 					if(_ntl != NULL)
@@ -556,19 +547,14 @@ int chk_do_timeout_link(int epoll_fd){
 				
 				{
 					epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
-//printf("0x%x close fd %d   l:%d\n", cok->L, cok->fd, __LINE__);
 					close(cok->fd);
 					cok->fd = -1;
 					cok->status = 0;
 				}
-				//luaL_unref(cok->L, LUA_REGISTRYINDEX, cok->ref);
 				lua_pushnil(cok->L);
 				lua_pushstring(cok->L, "timeout!");
 				int ret = lua_resume(cok->L, 2);
 				if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
-					//printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
-					//lua_pop(cok->L, -1);
-					
 					if(lua_gettop(cok->L) > 1){
 						lua_replace(cok->L, 2);
 						lua_pushnil(cok->L);
@@ -578,30 +564,26 @@ int chk_do_timeout_link(int epoll_fd){
 						lua_pushnil(cok->L);
 						lua_replace(cok->L, 1);
 					}
-					//lua_pushvalue(cok->L, -1);
+
 					lua_f_coroutine_resume_waiting(cok->L);
 				}
-						
 			}
 			_tl = _ttl;
 		}
 	}
 }
 
-int lua_f_time(lua_State *L)
-{
+int lua_f_time(lua_State *L){
 	lua_pushnumber(L, time(NULL));
 	return 1;
 }
 
-int lua_f_longtime(lua_State *L)
-{
+int lua_f_longtime(lua_State *L){
 	lua_pushnumber(L, longtime());
 	return 1;
 }
 
-size_t lua_calc_strlen_in_table(lua_State *L, int index, int arg_i, unsigned strict)
-{
+size_t lua_calc_strlen_in_table(lua_State *L, int index, int arg_i, unsigned strict){
 	double key;
 	int max;
 	int i;
@@ -618,13 +600,9 @@ size_t lua_calc_strlen_in_table(lua_State *L, int index, int arg_i, unsigned str
 
 	lua_pushnil(L); /* stack: table key */
 	while (lua_next(L, index) != 0) { /* stack: table key value */
-//printf("key type: %s\n", luaL_typename(L, -2));
-
 		if (lua_type(L, -2) == LUA_TNUMBER) {
 
 			key = lua_tonumber(L, -2);
-
-//printf("key value: %d", (int) key);
 
 			if (floor(key) == key && key >= 1) {
 				if (key > max) {
@@ -713,8 +691,7 @@ bad_type:
 	return size;
 }
 
-unsigned char *lua_copy_str_in_table(lua_State *L, int index, u_char *dst)
-{
+unsigned char *lua_copy_str_in_table(lua_State *L, int index, u_char *dst){
 	double key;
 	int max;
 	int i;
@@ -796,8 +773,7 @@ unsigned char *lua_copy_str_in_table(lua_State *L, int index, u_char *dst)
 
 #define base64_encoded_length(len) (((len + 2) / 3) * 4)
 #define base64_decoded_length(len) (((len + 3) / 4) * 3)
-static int base64encode(unsigned char *dst, const unsigned char *src, int len)
-{
+static int base64encode(unsigned char *dst, const unsigned char *src, int len){
 	unsigned char *d;
 	const unsigned char *s;
 	static char basis64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -833,8 +809,7 @@ static int base64encode(unsigned char *dst, const unsigned char *src, int len)
 	return d - dst;
 }
 
-static int base64_decode_internal(unsigned char *dst, const unsigned char *src, size_t slen, const unsigned char *basis)
-{
+static int base64_decode_internal(unsigned char *dst, const unsigned char *src, size_t slen, const unsigned char *basis){
 	size_t len;
 	unsigned char *d;
 	const unsigned char *s;
@@ -876,8 +851,7 @@ static int base64_decode_internal(unsigned char *dst, const unsigned char *src, 
 	return d - dst;
 }
 
-static int base64decode(unsigned char *dst, const unsigned char *src, size_t slen)
-{
+static int base64decode(unsigned char *dst, const unsigned char *src, size_t slen){
 	static unsigned char basis64[] = {
 		77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
 		77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
@@ -901,8 +875,7 @@ static int base64decode(unsigned char *dst, const unsigned char *src, size_t sle
 	return base64_decode_internal(dst, src, slen, basis64);
 }
 
-static int base64decode_url(unsigned char *dst, const unsigned char *src, size_t slen)
-{
+static int base64decode_url(unsigned char *dst, const unsigned char *src, size_t slen){
 	static char basis64[] = {
 		77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
 		77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
@@ -986,339 +959,333 @@ int lua_f_base64decode(lua_State *L){
 #define UNESCAPE_REDIRECT  2
 #define UNESCAPE_URI_COMPONENT  0
 uintptr_t
-ngx_http_lua_escape_uri(u_char *dst, u_char *src, size_t size, unsigned int type)
-{
-    unsigned int      n;
-    uint32_t       *escape;
-    static u_char   hex[] = "0123456789abcdef";
+ngx_http_lua_escape_uri(u_char *dst, u_char *src, size_t size, unsigned int type){
+	unsigned int      n;
+	uint32_t       *escape;
+	static u_char   hex[] = "0123456789abcdef";
 
-                    /* " ", "#", "%", "?", %00-%1F, %7F-%FF */
+					/* " ", "#", "%", "?", %00-%1F, %7F-%FF */
 
-    static uint32_t   uri[] = {
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+	static uint32_t   uri[] = {
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
 
-                    /* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
-        0xfc00886d, /* 1111 1100 0000 0000  1000 1000 0110 1101 */
+					/* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
+		0xfc00886d, /* 1111 1100 0000 0000  1000 1000 0110 1101 */
 
-                    /* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
-        0x78000000, /* 0111 1000 0000 0000  0000 0000 0000 0000 */
+					/* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
+		0x78000000, /* 0111 1000 0000 0000  0000 0000 0000 0000 */
 
-                    /*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
-        0xa8000000, /* 1010 1000 0000 0000  0000 0000 0000 0000 */
+					/*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
+		0xa8000000, /* 1010 1000 0000 0000  0000 0000 0000 0000 */
 
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-        0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-    };
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+	};
 
-                    /* " ", "#", "%", "+", "?", %00-%1F, %7F-%FF */
+					/* " ", "#", "%", "+", "?", %00-%1F, %7F-%FF */
 
-    static uint32_t   args[] = {
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+	static uint32_t   args[] = {
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
 
-                    /* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
-        0x80000829, /* 1000 0000 0000 0000  0000 1000 0010 1001 */
+					/* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
+		0x80000829, /* 1000 0000 0000 0000  0000 1000 0010 1001 */
 
-                    /* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
-        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+					/* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
+		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
 
-                    /*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
-        0x80000000, /* 1000 0000 0000 0000  0000 0000 0000 0000 */
+					/*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
+		0x80000000, /* 1000 0000 0000 0000  0000 0000 0000 0000 */
 
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-        0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-    };
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+	};
 
-                    /* " ", "#", """, "%", "'", %00-%1F, %7F-%FF */
+					/* " ", "#", """, "%", "'", %00-%1F, %7F-%FF */
 
-    static uint32_t   html[] = {
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+	static uint32_t   html[] = {
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
 
-                    /* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
-        0x000000ad, /* 0000 0000 0000 0000  0000 0000 1010 1101 */
+					/* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
+		0x000000ad, /* 0000 0000 0000 0000  0000 0000 1010 1101 */
 
-                    /* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
-        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+					/* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
+		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
 
-                    /*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
-        0x80000000, /* 1000 0000 0000 0000  0000 0000 0000 0000 */
+					/*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
+		0x80000000, /* 1000 0000 0000 0000  0000 0000 0000 0000 */
 
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-        0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-    };
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+	};
 
-                    /* " ", """, "%", "'", %00-%1F, %7F-%FF */
+					/* " ", """, "%", "'", %00-%1F, %7F-%FF */
 
-    static uint32_t   refresh[] = {
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+	static uint32_t   refresh[] = {
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
 
-                    /* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
-        0x00000085, /* 0000 0000 0000 0000  0000 0000 1000 0101 */
+					/* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
+		0x00000085, /* 0000 0000 0000 0000  0000 0000 1000 0101 */
 
-                    /* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
-        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+					/* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
+		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
 
-                    /*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
-        0x80000000, /* 1000 0000 0000 0000  0000 0000 0000 0000 */
+					/*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
+		0x80000000, /* 1000 0000 0000 0000  0000 0000 0000 0000 */
 
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-        0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-    };
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+	};
 
-                    /* " ", "%", %00-%1F */
+					/* " ", "%", %00-%1F */
 
-    static uint32_t   memcached[] = {
-        0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+	static uint32_t   memcached[] = {
+		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
 
-                    /* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
-        0x00000021, /* 0000 0000 0000 0000  0000 0000 0010 0001 */
+					/* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
+		0x00000021, /* 0000 0000 0000 0000  0000 0000 0010 0001 */
 
-                    /* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
-        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+					/* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
+		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
 
-                    /*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
-        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+					/*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
+		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
 
-        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
-        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
-        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
-        0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
-    };
+		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+	};
 
-                    /* mail_auth is the same as memcached */
+					/* mail_auth is the same as memcached */
 
-    static uint32_t  *map[] =
-        { uri, args, html, refresh, memcached, memcached };
+	static uint32_t  *map[] =
+		{ uri, args, html, refresh, memcached, memcached };
 
 
-    escape = map[type];
+	escape = map[type];
 
-    if (dst == NULL) {
+	if (dst == NULL) {
 
-        /* find the number of the characters to be escaped */
+		/* find the number of the characters to be escaped */
 
-        n = 0;
+		n = 0;
 
-        while (size) {
-            if (escape[*src >> 5] & (1 << (*src & 0x1f))) {
-                n++;
-            }
-            src++;
-            size--;
-        }
+		while (size) {
+			if (escape[*src >> 5] & (1 << (*src & 0x1f))) {
+				n++;
+			}
+			src++;
+			size--;
+		}
 
-        return (uintptr_t) n;
-    }
+		return (uintptr_t) n;
+	}
 
-    while (size) {
-        if (escape[*src >> 5] & (1 << (*src & 0x1f))) {
-            *dst++ = '%';
-            *dst++ = hex[*src >> 4];
-            *dst++ = hex[*src & 0xf];
-            src++;
+	while (size) {
+		if (escape[*src >> 5] & (1 << (*src & 0x1f))) {
+			*dst++ = '%';
+			*dst++ = hex[*src >> 4];
+			*dst++ = hex[*src & 0xf];
+			src++;
 
-        } else {
-            *dst++ = *src++;
-        }
-        size--;
-    }
+		} else {
+			*dst++ = *src++;
+		}
+		size--;
+	}
 
-    return (uintptr_t) dst;
+	return (uintptr_t) dst;
 }
 
 
 /* XXX we also decode '+' to ' ' */
-void
-ngx_http_lua_unescape_uri(u_char **dst, u_char **src, size_t size,
-    unsigned int type)
-{
-    u_char  *d, *s, ch, c, decoded;
-    enum {
-        sw_usual = 0,
-        sw_quoted,
-        sw_quoted_second
-    } state;
+void ngx_http_lua_unescape_uri(u_char **dst, u_char **src, size_t size, unsigned int type){
+	u_char  *d, *s, ch, c, decoded;
+	enum {
+		sw_usual = 0,
+		sw_quoted,
+		sw_quoted_second
+	} state;
 
-    d = *dst;
-    s = *src;
+	d = *dst;
+	s = *src;
 
-    state = 0;
-    decoded = 0;
+	state = 0;
+	decoded = 0;
 
-    while (size--) {
+	while (size--) {
 
-        ch = *s++;
+		ch = *s++;
 
-        switch (state) {
-        case sw_usual:
-            if (ch == '?'
-                && (type & (UNESCAPE_URI|UNESCAPE_REDIRECT)))
-            {
-                *d++ = ch;
-                goto done;
-            }
+		switch (state) {
+		case sw_usual:
+			if (ch == '?'
+				&& (type & (UNESCAPE_URI|UNESCAPE_REDIRECT)))
+			{
+				*d++ = ch;
+				goto done;
+			}
 
-            if (ch == '%') {
-                state = sw_quoted;
-                break;
-            }
+			if (ch == '%') {
+				state = sw_quoted;
+				break;
+			}
 
-            if (ch == '+') {
-                *d++ = ' ';
-                break;
-            }
+			if (ch == '+') {
+				*d++ = ' ';
+				break;
+			}
 
-            *d++ = ch;
-            break;
+			*d++ = ch;
+			break;
 
-        case sw_quoted:
+		case sw_quoted:
 
-            if (ch >= '0' && ch <= '9') {
-                decoded = (u_char) (ch - '0');
-                state = sw_quoted_second;
-                break;
-            }
+			if (ch >= '0' && ch <= '9') {
+				decoded = (u_char) (ch - '0');
+				state = sw_quoted_second;
+				break;
+			}
 
-            c = (u_char) (ch | 0x20);
-            if (c >= 'a' && c <= 'f') {
-                decoded = (u_char) (c - 'a' + 10);
-                state = sw_quoted_second;
-                break;
-            }
+			c = (u_char) (ch | 0x20);
+			if (c >= 'a' && c <= 'f') {
+				decoded = (u_char) (c - 'a' + 10);
+				state = sw_quoted_second;
+				break;
+			}
 
-            /* the invalid quoted character */
+			/* the invalid quoted character */
 
-            state = sw_usual;
+			state = sw_usual;
 
-            *d++ = ch;
+			*d++ = ch;
 
-            break;
+			break;
 
-        case sw_quoted_second:
+		case sw_quoted_second:
 
-            state = sw_usual;
+			state = sw_usual;
 
-            if (ch >= '0' && ch <= '9') {
-                ch = (u_char) ((decoded << 4) + ch - '0');
+			if (ch >= '0' && ch <= '9') {
+				ch = (u_char) ((decoded << 4) + ch - '0');
 
-                if (type & UNESCAPE_REDIRECT) {
-                    if (ch > '%' && ch < 0x7f) {
-                        *d++ = ch;
-                        break;
-                    }
+				if (type & UNESCAPE_REDIRECT) {
+					if (ch > '%' && ch < 0x7f) {
+						*d++ = ch;
+						break;
+					}
 
-                    *d++ = '%'; *d++ = *(s - 2); *d++ = *(s - 1);
-                    break;
-                }
+					*d++ = '%'; *d++ = *(s - 2); *d++ = *(s - 1);
+					break;
+				}
 
-                *d++ = ch;
+				*d++ = ch;
 
-                break;
-            }
+				break;
+			}
 
-            c = (u_char) (ch | 0x20);
-            if (c >= 'a' && c <= 'f') {
-                ch = (u_char) ((decoded << 4) + c - 'a' + 10);
+			c = (u_char) (ch | 0x20);
+			if (c >= 'a' && c <= 'f') {
+				ch = (u_char) ((decoded << 4) + c - 'a' + 10);
 
-                if (type & UNESCAPE_URI) {
-                    if (ch == '?') {
-                        *d++ = ch;
-                        goto done;
-                    }
+				if (type & UNESCAPE_URI) {
+					if (ch == '?') {
+						*d++ = ch;
+						goto done;
+					}
 
-                    *d++ = ch;
-                    break;
-                }
+					*d++ = ch;
+					break;
+				}
 
-                if (type & UNESCAPE_REDIRECT) {
-                    if (ch == '?') {
-                        *d++ = ch;
-                        goto done;
-                    }
+				if (type & UNESCAPE_REDIRECT) {
+					if (ch == '?') {
+						*d++ = ch;
+						goto done;
+					}
 
-                    if (ch > '%' && ch < 0x7f) {
-                        *d++ = ch;
-                        break;
-                    }
+					if (ch > '%' && ch < 0x7f) {
+						*d++ = ch;
+						break;
+					}
 
-                    *d++ = '%'; *d++ = *(s - 2); *d++ = *(s - 1);
-                    break;
-                }
+					*d++ = '%'; *d++ = *(s - 2); *d++ = *(s - 1);
+					break;
+				}
 
-                *d++ = ch;
+				*d++ = ch;
 
-                break;
-            }
+				break;
+			}
 
-            /* the invalid quoted character */
+			/* the invalid quoted character */
 
-            break;
-        }
-    }
+			break;
+		}
+	}
 
 done:
 
-    *dst = d;
-    *src = s;
+	*dst = d;
+	*src = s;
 }
 
-int lua_f_escape_uri(lua_State *L)
-{
-    size_t                   len, dlen;
-    uintptr_t                escape;
-    u_char                  *src, *dst;
+int lua_f_escape_uri(lua_State *L){
+	size_t                   len, dlen;
+	uintptr_t                escape;
+	u_char                  *src, *dst;
 
-    if (lua_gettop(L) != 1) {
-        return luaL_error(L, "expecting one argument");
-    }
+	if (lua_gettop(L) != 1) {
+		return luaL_error(L, "expecting one argument");
+	}
 
-    src = (u_char *) luaL_checklstring(L, 1, &len);
+	src = (u_char *) luaL_checklstring(L, 1, &len);
 
-    if (len == 0) {
-        return 1;
-    }
+	if (len == 0) {
+		return 1;
+	}
 
-    escape = 2 * ngx_http_lua_escape_uri(NULL, src, len, ESCAPE_URI);
+	escape = 2 * ngx_http_lua_escape_uri(NULL, src, len, ESCAPE_URI);
 
-    if (escape) {
-        dlen = escape + len;
-        dst = lua_newuserdata(L, dlen);
-        ngx_http_lua_escape_uri(dst, src, len, ESCAPE_URI);
-        lua_pushlstring(L, (char *) dst, dlen);
-    }
+	if (escape) {
+		dlen = escape + len;
+		dst = lua_newuserdata(L, dlen);
+		ngx_http_lua_escape_uri(dst, src, len, ESCAPE_URI);
+		lua_pushlstring(L, (char *) dst, dlen);
+	}
 
-    return 1;
+	return 1;
 }
 
-int lua_f_unescape_uri(lua_State *L)
-{
-    size_t                   len, dlen;
-    u_char                  *p;
-    u_char                  *src, *dst;
+int lua_f_unescape_uri(lua_State *L){
+	size_t len, dlen;
+	u_char *p;
+	u_char *src, *dst;
 
-    if (lua_gettop(L) != 1) {
-        return luaL_error(L, "expecting one argument");
-    }
+	if (lua_gettop(L) != 1) {
+		return luaL_error(L, "expecting one argument");
+	}
 
-    src = (u_char *) luaL_checklstring(L, 1, &len);
+	src = (u_char *) luaL_checklstring(L, 1, &len);
 
-    /* the unescaped string can only be smaller */
-    dlen = len;
+	/* the unescaped string can only be smaller */
+	dlen = len;
 
-    p = lua_newuserdata(L, dlen);
+	p = lua_newuserdata(L, dlen);
 
-    dst = p;
+	dst = p;
 
-    ngx_http_lua_unescape_uri(&dst, &src, len, UNESCAPE_URI_COMPONENT);
+	ngx_http_lua_unescape_uri(&dst, &src, len, UNESCAPE_URI_COMPONENT);
 
-    lua_pushlstring(L, (char *) p, dst - p);
+	lua_pushlstring(L, (char *) p, dst - p);
 
-    return 1;
+	return 1;
 }
