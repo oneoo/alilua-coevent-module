@@ -5,7 +5,9 @@ A Lua epoll base coroutine module (Only support Linux platform)
 Install
 --------
 $tar zxf alilua-coevent-module-*.tar.gz
+
 $cd alilua-coevent-module
+
 $sudo make install clean
 
 Start
@@ -130,9 +132,9 @@ The input argument data can either be a Lua string or a (nested) Lua table holdi
 
 The input argument data can either be '*l', '*a' or a number.
 
-* ***l**: reads a line of text from the socket. The line is terminated by a Line Feed (LF) character (ASCII 10), optionally preceded by a Carriage Return (CR) character (ASCII 13). The CR and LF characters are not included in the returned line. In fact, all CR characters are ignored by the pattern.
+* `'*l'`: reads a line of text from the socket. The line is terminated by a Line Feed (LF) character (ASCII 10), optionally preceded by a Carriage Return (CR) character (ASCII 13). The CR and LF characters are not included in the returned line. In fact, all CR characters are ignored by the pattern.
 
-* ***a**: reads from the socket until the connection is closed. No end-of-line translation is performed;
+* `'*a'`: reads from the socket until the connection is closed. No end-of-line translation is performed;
 
 **If no argument is specified, then it is assumed to be the pattern '*a'**
 
