@@ -192,8 +192,7 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 	
 	int opt = 1;
 	ioctl(cok->dns_query_fd, FIONBIO, &opt);
-	
-	memset(&ev, 0, sizeof(ev));
+
 	ev.events  = EPOLLIN | EPOLLET;
 	ev.data.fd = cok->dns_query_fd;
 	ev.data.ptr = cok;
@@ -335,7 +334,7 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 		epoll_ctl(epoll_fd, EPOLL_CTL_ADD, cok->fd, &ev);
 		
 		struct sockaddr_in addr;
-		bzero(&addr,sizeof(addr));
+		bzero(&addr,sizeof(struct sockaddr_in));
 		addr.sin_family=AF_INET;
 		addr.sin_port=htons(cok->connect_to_port);
 		addr.sin_addr= ips[cok->dns_query_fd%found];
@@ -374,7 +373,7 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 		return -1;
 	}
 
-	bzero(&addr,sizeof(addr));
+	bzero(&addr,sizeof(struct sockaddr_in));
 	addr.sin_family=AF_INET;
 	addr.sin_port=htons(port);
 	addr.sin_addr.s_addr=inet_addr(host);//按IP初始化
@@ -425,7 +424,7 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 	
 	add_to_timeout_link(cok, cok->timeout/2);
 	
-	*ret = connect(sockfd,(struct sockaddr*)&addr,sizeof(addr));
+	*ret = connect(sockfd,(struct sockaddr*)&addr, sizeof(struct sockaddr_in));
 
 	return sockfd;
 }

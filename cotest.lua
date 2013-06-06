@@ -1,7 +1,6 @@
 local L = require('coevent')
 print('start')
 
-
 local mysql = require "mysql"
 local cjson = require "cjson"
 local db = mysql:new()
@@ -129,6 +128,7 @@ function test_http_client(id, host, uri)
 	--print('start test_http_client', id, host, uri)
 	local cok = cosocket.tcp()
 	local r,e = cok:connect(host, 80)
+	--print(abc..'cc')
 
 	if not r then print(1, e) return false end
 	--print('----------------------------------------connected!!!', id)
@@ -138,6 +138,7 @@ function test_http_client(id, host, uri)
 	else
 		cok:send('GET '..uri..' HTTP/1.1\r\nHost: '..host..'\r\nUser-Agent: Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.7.6)\r\n')
 	end
+	
 	if not cok:send('Connection: close\r\n\r\n') then print('send error') return false end
 	
 	local s,e,oss,oss2,oss3,oss4,kc
@@ -148,7 +149,9 @@ function test_http_client(id, host, uri)
 		oss3 = oss2
 		oss2 = oss
 		oss = s
+		
 		s,e = cok:receive('*l')
+		--s,e = cok:receive(20)
 		if s then kc = kc + #s end
 		--print(id, s)
 		--print(id,'read ', s and #s or -1)
@@ -186,7 +189,7 @@ local af = function()
 	--t3 = newthread(test_http_client, 3, 'www.163.com')
 	--coroutine_wait(newthread(test_http_client, 1, 'wiki.upyun.com', '/index.php?title=%E9%A6%96%E9%A1%B5'))
 	local ts = {}
-	for i=1,100 do swop()
+	for i=1,10 do swop()
 		table.insert(ts, newthread(test_http_client, i+100, 'wiki.upyun.com', '/index.php?title=%E9%A6%96%E9%A1%B5'))
 		--table.insert(ts, newthread(test_http_client, i+200, 'www.qq.com', '/'))
 		--table.insert(ts, newthread(test_http_client, i+300, 'news.qq.com', '/'))
@@ -207,7 +210,7 @@ local af = function()
 	
 	local t = longtime()
 	local ts = {}
-	for i=1,10 do --swop()
+	for i=1,1 do --swop()
 		print(i, coroutine_wait(newthread(test_http_client, i+100, 'wiki.upyun.com', '/index.php?title=%E9%A6%96%E9%A1%B5')))
 	end
 	print('times:', (longtime()-t)/1000)

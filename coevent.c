@@ -24,7 +24,13 @@ static int lua_co_connect(lua_State *L){
 
 //printf(" 0x%x connect to %s\n", L, lua_tostring(L, 2));
 
-		const char *host = lua_tostring(L, 2);
+		size_t host_len = 0;
+		const char *host = lua_tolstring(L, 2, &host_len);
+		if(host_len > 60){
+			lua_pushnil(L);
+			lua_pushstring(L, "hostname length must be <= 60!");
+			return 2;
+		}
 		int port = lua_tonumber(L, 3);
 		cok->status = 1;
 		cok->L = L;
@@ -48,7 +54,7 @@ static int lua_co_connect(lua_State *L){
 			lua_pushstring(L, "names lookup error!");
 			return 2;
 		}
-		
+
 		if(connect_ret == 0){
 			cok->status = 2;
 			
@@ -425,12 +431,30 @@ int lua_f_coroutine_wait(lua_State *L){
 		if(!lua_isthread(L, 1))return 0;
 		
 		lua_State *JL = lua_tothread(L, 1);
-		if(lua_status(JL) != LUA_YIELD){
+		int st = lua_status(JL);
+		if(st != LUA_YIELD){
+			if(st == 0){
+				lua_pushstring(L, "allthreads");
+				lua_gettable(L, LUA_GLOBALSINDEX);
+				lua_pushvalue(L, -2);
+				lua_gettable(L, -2);
+				if(lua_istable(L, -1)){
+					size_t l = lua_objlen(L, -1);
+					int i = 0;
+					for(i=0;i<l;i++)
+						lua_rawgeti (L, 0-(i+1), i+1);
+
+					return l;
+				}
+				return 0;
+			}
 			/// get returns to tmp table (may have)
 			int rts = lua_gettop(JL);
 			lua_xmove(JL, L, rts);
 			int ret = lua_resume(JL, 0);
-			if (ret == LUA_ERRRUN) {lua_pop(JL, -1);}
+			if (ret == LUA_ERRRUN) {
+				lua_pop(JL, -1);
+			}
 			return rts;
 		}
 		
@@ -440,6 +464,7 @@ int lua_f_coroutine_wait(lua_State *L){
 		lua_setglobal(JL, key);
 		lua_pop(L, 1);
 	}
+
 	return lua_yield(L, 0);
 }
 int lua_f_coroutine_resume_waiting(lua_State *L){
@@ -447,7 +472,6 @@ int lua_f_coroutine_resume_waiting(lua_State *L){
 	sprintf(key,"%x__be_resume", L);
 	lua_getglobal(L, key);
 	if(LUA_TLIGHTUSERDATA == lua_type(L, -1)){
-		
 		cosocket_swop_t *swop = malloc(sizeof(cosocket_swop_t));
 		if(swop == NULL){
 			exit(1);
@@ -472,11 +496,20 @@ int lua_f_coroutine_resume_waiting(lua_State *L){
 			int rts = lua_gettop(L);
 			lua_xmove(L, _L, rts);
 			int ret = lua_resume(_L, rts);
-			if (ret == LUA_ERRRUN) {
+			if (ret == LUA_ERRRUN && lua_isstring(_L, -1)) {
 				printf("%d isstring: %s\n", __LINE__, lua_tostring(_L, -1));
 				lua_pop(_L, -1);
 			}
 	
+		}
+	}else{
+		if(lua_type(L, -2) == LUA_TNIL){ /// is error back
+			lua_pop(L, 1);
+			return 2;
+		}else{
+			lua_pop(L, -1);
+			lua_pushthread(L);
+			return 1;
 		}
 	}
 
@@ -523,7 +556,7 @@ int epoll_worker(){
 		nfds = epoll_wait(epoll_fd, events, 128, 10);
 		io_counts+=nfds;
 		swop_counter = swop_counter/2;
-		
+
 		for(i=0; i<nfds; i++){
 			cok = events[i].data.ptr;
 			if(cok->dns_query_fd > -1){ /// is dns query
@@ -539,6 +572,7 @@ int epoll_worker(){
 				continue;
 			}
 			if(events[i].events & EPOLLIN){
+//printf("fd:%d EPOLLIN\n", cok->fd);
 init_read_buf:
 				if(!cok->read_buf || (cok->last_buf->buf_len >= cok->last_buf->buf_size)){/// init read buf
 					cosocket_link_buf_t *nbuf = NULL;
@@ -587,7 +621,7 @@ init_read_buf:
 							ret = lua_resume(cok->L, 1);
 						}
 						if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
-							printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
+							//printf("%d isstring: %s\n", __LINE__, lua_tostring(cok->L, -1));
 							//lua_pop(cok->L, -1);
 							{
 								epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
@@ -595,7 +629,7 @@ init_read_buf:
 								cok->fd = -1;
 								cok->status = 0;
 							}
-							
+						
 							if(lua_gettop(cok->L) > 1){
 								lua_replace(cok->L, 2);
 								lua_pushnil(cok->L);
@@ -649,6 +683,7 @@ init_read_buf:
 					}//else{printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!aaaaa\n");}
 				}
 			}else if(events[i].events & EPOLLOUT){
+//printf("fd:%d EPOLLOUT\n", cok->fd);
 				if(cok->status == 1){
 					cok->status = 2;
 					int result = 0;
@@ -800,7 +835,7 @@ printf("fd:%d other\n", cok->fd);
 		if(io_counts >= 1000){
 			io_counts = 0;
 			if(clearthreads_handler != 0){
-				lua_rawgeti(LM, LUA_REGISTRYINDEX, clearthreads_handler); 
+				lua_rawgeti(LM, LUA_REGISTRYINDEX, clearthreads_handler);
 				if(lua_pcall(LM, 0, 0, 0)){
 					printf("%d isstring: %s\n", __LINE__, lua_tostring(LM, -1));
 					lua_pop(LM, -1);
@@ -825,12 +860,14 @@ printf("fd:%d other\n", cok->fd);
 				free(swop);
 				swop = NULL;
 
-				lua_pushboolean(L, 1);
-				int ret = lua_resume(L, 1);
-				if (ret == LUA_ERRRUN && lua_isstring(L, -1)) {
-					//printf("%d isstring: %s\n", __LINE__, lua_tostring(L, -1));
-					lua_pop(L, -1);
-					lua_f_coroutine_resume_waiting(L);
+				if(lua_status(L) != 0){
+					lua_pushboolean(L, 1);
+					int ret = lua_resume(L, 1);
+					if (ret == LUA_ERRRUN && lua_isstring(L, -1)) {
+						//printf("%d isstring: %s\n", __LINE__, lua_tostring(L, -1));
+						lua_pop(L, -1);
+						lua_f_coroutine_resume_waiting(L);
+					}
 				}
 			}
 		}
@@ -917,6 +954,7 @@ int lua_f_startloop(lua_State *L){
 	
 	lua_getglobal(job_L, "clearthreads");
 	clearthreads_handler = luaL_ref(job_L, LUA_REGISTRYINDEX);
+	
 	LM = job_L;
 	epoll_worker();
 
@@ -942,11 +980,9 @@ int luaopen_coevent(lua_State *L) {
 	lua_register(L, "time", lua_f_time);
 	lua_register(L, "longtime", lua_f_longtime);
 	
-	luaL_loadstring(L, "local _coresume = coroutine.resume \
-local _cocreate = coroutine.create \
-coroutine.resume = nil \
-coroutine.create = nil \
-local allthreads = {} \
+	luaL_loadstring(L, "_coresume = coroutine.resume \
+_cocreate = coroutine.create \
+allthreads = {} \
 function clearthreads() \
 	local v \
 	local c = 0 \
@@ -958,7 +994,8 @@ function clearthreads() \
 	end \
 	collectgarbage() \
 end \
-function newthread(f,n1,n2,n3,n4,n5) local F = _cocreate(function(n1,n2,n3,n4,n5) local R = {f(n1,n2,n3,n4,n5)} coroutine_resume_waiting(unpack(R)) return unpack(R) end) _coresume(F,n1,n2,n3,n4,n5) allthreads[F]=1 return F end");//allthreads[F] = {...} 
+function newthread(f,n1,n2,n3,n4,n5) local F = _cocreate(function(n1,n2,n3,n4,n5) local R = {f(n1,n2,n3,n4,n5)} local t = coroutine_resume_waiting(unpack(R)) if t then allthreads[t] = R end return unpack(R) end) _coresume(F,n1,n2,n3,n4,n5) allthreads[F]=1 return F end");
+
 	lua_pcall(L,0,0,0);
 	
 	static const struct luaL_reg _MT[] = {{NULL, NULL}};

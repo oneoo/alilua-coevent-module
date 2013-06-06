@@ -91,7 +91,7 @@ Start
         print(coroutine_wait(t2)) --print readed len
     end)
 
-Epoll lopp Directives
+Epoll loop Directives
 ---------
 **synctx:** coevent(function)
 
