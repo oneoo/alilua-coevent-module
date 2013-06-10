@@ -63,8 +63,8 @@ typedef struct{
 	struct sockaddr_in *addr;
 	void *next;
 	void *uper;
-	int timeout;
-	int recache;
+	int fd;
+	int recached;
 } cosocket_connect_pool_t;
 
 typedef struct {
@@ -74,7 +74,7 @@ typedef struct {
 	void *ptr;
 	lua_State *L;
 	const u_char *send_buf;
-	u_char _send_buf[3908];// with size align / 60
+	u_char _send_buf[3882];// with size align / 60
 	size_t send_buf_len;
 	size_t send_buf_ed;
 	u_char *send_buf_need_free;
@@ -92,7 +92,7 @@ typedef struct {
 	int dns_query_fd;
 	char dns_query_name[60];// with size align / 60
 	struct sockaddr_in addr;
-	int connect_to_port;
+	int reusedtimes;
 	
 	int ref;
 } cosocket_t;
