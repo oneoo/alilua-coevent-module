@@ -1,16 +1,16 @@
 #include "coevent.h"
 #include <asm/ioctls.h>
 
-int setnonblocking(int fd){
+int coevent_setnonblocking(int fd){
 	int opts;
 	opts=fcntl(fd, F_GETFL);
 	if (opts < 0) {
-		perror ( "fcntl failed\n");
+		printf ( "fcntl failed fd:%d %d\n", fd, __LINE__);
 		return 0;
 	}
 	opts = opts | O_NONBLOCK;
 	if (fcntl(fd, F_SETFL, opts) < 0) {
-		perror ( "fcntl failed\n");
+		printf ( "fcntl failed %d\n", __LINE__);
 		return 0;
 	}
 	return 1;
@@ -34,6 +34,21 @@ static inline uint32_t fnv1a_64(const char *data, uint32_t len) {
   }
   return (uint32_t)rv;
 }
+
+void *connect_pool_p[3][64] = {{NULL32 NULL32},{NULL32 NULL32},{NULL32 NULL32}};
+int connect_pool_ttl = 180;
+int get_connect_in_pool(struct sockaddr_in addr){
+	time(&timer);
+	int p = (timer/connect_pool_ttl)%3;
+}
+int add_connect_to_pool(int fd, struct sockaddr_in addr, int do_recache){
+	time(&timer);
+	int p = (timer/connect_pool_ttl)%3;
+	if(do_recache==1)
+		p = (p+1)%3;
+	printf("%ul\n", addr.sin_addr);
+}
+
 typedef struct{
 	uint32_t	key1;
 	uint32_t	key2;
@@ -83,6 +98,7 @@ int get_dns_cache(const char *name, struct in_addr *addr){
 }
 
 void add_dns_cache(const char *name, struct in_addr addr, int do_recache){
+	time(&timer);
 	int p = (timer/dns_cache_ttl)%3;
 	if(do_recache==1)
 		p = (p+1)%3;
@@ -327,21 +343,17 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 	}
 
 	if(found > 0){
-		setnonblocking(cok->fd);
+		coevent_setnonblocking(cok->fd);
 		
 		ev.data.ptr = cok;
 		ev.events = EPOLLOUT;
 		epoll_ctl(epoll_fd, EPOLL_CTL_ADD, cok->fd, &ev);
 		
-		struct sockaddr_in addr;
-		bzero(&addr,sizeof(struct sockaddr_in));
-		addr.sin_family=AF_INET;
-		addr.sin_port=htons(cok->connect_to_port);
-		addr.sin_addr= ips[cok->dns_query_fd%found];
+		cok->addr.sin_addr= ips[cok->dns_query_fd%found];
 		
-		add_dns_cache(cok->dns_query_name, addr.sin_addr, 0);
+		add_dns_cache(cok->dns_query_name, cok->addr.sin_addr, 0);
 		
-		int ret = connect(cok->fd,(struct sockaddr*)&addr,sizeof(struct sockaddr));
+		int ret = connect(cok->fd,(struct sockaddr*)&cok->addr,sizeof(struct sockaddr));
 		if(ret == 0){
 			///////// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! connected /////
 		}
@@ -366,18 +378,17 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 static struct hostent* localhost_ent = NULL;
 int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *ret){
 	int sockfd = -1;
-	struct sockaddr_in addr;
 
 	if((sockfd=socket(AF_INET,SOCK_STREAM,0))<0){
 		herror("Init socket error!");
 		return -1;
 	}
 
-	bzero(&addr,sizeof(struct sockaddr_in));
-	addr.sin_family=AF_INET;
-	addr.sin_port=htons(port);
-	addr.sin_addr.s_addr=inet_addr(host);//按IP初始化
-	if(addr.sin_addr.s_addr == INADDR_NONE){//如果输入的是域名
+	bzero(&cok->addr,sizeof(struct sockaddr_in));
+	cok->addr.sin_family=AF_INET;
+	cok->addr.sin_port=htons(port);
+	cok->addr.sin_addr.s_addr=inet_addr(host);//按IP初始化
+	if(cok->addr.sin_addr.s_addr == INADDR_NONE){//如果输入的是域名
 		int is_localhost = (strcmp(host,"localhost")==0);
 		struct hostent *phost = localhost_ent;
 		int in_cache = 0;
@@ -385,10 +396,11 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 			if(is_localhost)
 				phost = (struct hostent*)gethostbyname(host);
 			else{
-				if(get_dns_cache(host, &addr.sin_addr)){
+				if(get_dns_cache(host, &cok->addr.sin_addr)){
 					in_cache = 1;
 				}else{
-					cok->connect_to_port = port;
+					cok->fd = sockfd;
+
 					if(!do_dns_query(epoll_fd, cok, host)){
 						close(sockfd);
 						return -3;
@@ -410,11 +422,11 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 				return -2;
 			}
 			
-			addr.sin_addr.s_addr =((struct in_addr*)phost->h_addr)->s_addr;
+			cok->addr.sin_addr.s_addr =((struct in_addr*)phost->h_addr)->s_addr;
 		}
 	}
 	
-	setnonblocking(sockfd);
+	coevent_setnonblocking(sockfd);
 	
 	struct epoll_event ev;
 	cok->fd = sockfd;
@@ -423,8 +435,7 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 	epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sockfd, &ev);
 	
 	add_to_timeout_link(cok, cok->timeout/2);
-	
-	*ret = connect(sockfd,(struct sockaddr*)&addr, sizeof(struct sockaddr_in));
+	*ret = connect(sockfd,(struct sockaddr*)&cok->addr, sizeof(struct sockaddr_in));
 
 	return sockfd;
 }
@@ -538,6 +549,8 @@ int chk_do_timeout_link(int epoll_fd){
 				cosocket_t *cok = _tl->cok;
 				free(_tl);
 				
+				printf("fd timeout %d %d  %ld\n", cok->fd,cok->dns_query_fd, _tl->timeout);
+				
 				if(cok->dns_query_fd > -1){
 					epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->dns_query_fd, &ev);
 					close(cok->dns_query_fd);
@@ -550,6 +563,7 @@ int chk_do_timeout_link(int epoll_fd){
 					cok->fd = -1;
 					cok->status = 0;
 				}
+				
 				lua_pushnil(cok->L);
 				lua_pushstring(cok->L, "timeout!");
 				int ret = lua_resume(cok->L, 2);

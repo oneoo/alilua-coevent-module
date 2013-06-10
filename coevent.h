@@ -19,6 +19,10 @@
 #include <lua.h>
 #include <lauxlib.h>
 
+#define free(p) do { if (p) { free(p); p = NULL; } } while (0)
+#define close(fd) do { if (fd >= 0) { close(fd); fd = -1; } } while (0)
+//printf("closeat %d %s:%d\n",fd,__FILE__,__LINE__);
+
 #ifndef _COTEST_H
 	#define _COTEST_H
 	
@@ -55,6 +59,14 @@ typedef struct{
 	char z[2]; /// size align
 } cosocket_link_buf_t;
 
+typedef struct{
+	struct sockaddr_in *addr;
+	void *next;
+	void *uper;
+	int timeout;
+	int recache;
+} cosocket_connect_pool_t;
+
 typedef struct {
 	int type;
 	int fd;
@@ -79,6 +91,7 @@ typedef struct {
 	int dns_tid;
 	int dns_query_fd;
 	char dns_query_name[60];// with size align / 60
+	struct sockaddr_in addr;
 	int connect_to_port;
 	
 	int ref;
@@ -102,7 +115,7 @@ typedef struct{
 } dns_query_header_t;
 
 #define NULL32 NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
-int setnonblocking(int fd);
+int coevent_setnonblocking(int fd);
 int add_to_timeout_link(cosocket_t *cok, int timeout);
 int del_in_timeout_link(cosocket_t *cok);
 int lua_f_coroutine_resume_waiting(lua_State *L);
