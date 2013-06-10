@@ -41,7 +41,7 @@ static int lua_co_connect(lua_State *L){
 		int connect_ret = 0;
 		cok->fd = tcp_connect(host, port, cok, epoll_fd, &connect_ret);
 		
-		if(cok->fd == -1){
+		if(cok->fd == -1 && cok->dns_query_fd == -1){
 			lua_pushnil(L);
 			lua_pushstring(L, "Init socket error!");
 			return 2;
