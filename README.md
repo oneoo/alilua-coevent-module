@@ -150,6 +150,12 @@ Socket objects that have not invoked this method (and associated connections) wi
 
 Set the timeout value in milliseconds for subsequent socket operations (connect, receive, and iterators returned from receiveuntil).
 
+###cok:setkeepalive
+
+**syntax:** cok:setkeepalive(size, ['pool key'])
+
+Puts the current socket's connection immediately into the cosocket built-in connection pool and keep it alive until other connect method calls request it or the associated maximal idle timeout is expired(60 sec).
+
 thread Directives
 --------
 ###newthread
