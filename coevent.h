@@ -60,11 +60,12 @@ typedef struct{
 } cosocket_link_buf_t;
 
 typedef struct{
-	struct sockaddr_in *addr;
+	struct sockaddr_in addr;
 	void *next;
 	void *uper;
 	int fd;
 	int recached;
+	unsigned long pool_key;
 } cosocket_connect_pool_t;
 
 typedef struct {
@@ -74,7 +75,7 @@ typedef struct {
 	void *ptr;
 	lua_State *L;
 	const u_char *send_buf;
-	u_char _send_buf[3882];// with size align / 60
+	u_char _send_buf[3872];// with size align / 60
 	size_t send_buf_len;
 	size_t send_buf_ed;
 	u_char *send_buf_need_free;
@@ -92,6 +93,8 @@ typedef struct {
 	int dns_query_fd;
 	char dns_query_name[60];// with size align / 60
 	struct sockaddr_in addr;
+	int pool_size;
+	unsigned long pool_key;
 	int reusedtimes;
 	
 	int ref;

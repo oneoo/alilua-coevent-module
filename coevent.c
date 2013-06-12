@@ -312,11 +312,11 @@ static int _lua_co_close(lua_State *L, cosocket_t *cok){
 	}
 	
 	if(cok->fd > -1){
-		if(add_connect_to_pool(cok->fd, cok->addr) == 0){
+		if(cok->pool_size < 1 || add_connect_to_pool(cok->pool_key, cok->pool_size, cok->fd, cok->addr) == 0){
+			close(cok->fd);
+		}
 		struct epoll_event ev;
 		epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
-		close(cok->fd);
-		}
 		cok->fd = -1;
 	}
 
@@ -366,7 +366,22 @@ int lua_co_settimeout(lua_State *L){
 	return 0;
 }
 int lua_co_setkeepalive(lua_State *L){
-	lua_pushnumber(L, 0);
+	if(!lua_isuserdata(L, 1) || !lua_isnumber(L, 2)){
+		lua_pushnil(L);
+		lua_pushstring(L, "Error params!");
+		return 2;
+	}
+
+	cosocket_t *cok = (cosocket_t *)lua_touserdata(L, 1);
+	
+	cok->pool_size = lua_tonumber(L, 2);
+	if(lua_gettop(L) == 3 && lua_isstring(L, 3)){
+		size_t len = 0;
+		const char *key = lua_tolstring(L, 3, &len);
+		cok->pool_key = fnv1a_32(key, len);
+	}
+
+	lua_pushboolean(L, 1);
 	return 1;
 }
 
@@ -417,6 +432,8 @@ static int lua_co_tcp(lua_State *L){
 	cok->timeout = 30000;
 	cok->dns_query_fd = -1;
 	cok->in_read_action = 0;
+	cok->pool_size = 0;
+	cok->pool_key = 0;
 
 	if (luaL_newmetatable(L, "cosocket"))
 	{
@@ -607,7 +624,7 @@ init_read_buf:
 			{
 				cok->status = 0;
 				if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev) == -1)
-					printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
+					printf("EPOLL_CTL_DEL error: %s:%d %s", __FILE__, __LINE__, strerror(errno));
 				close(cok->fd);
 				cok->fd = -1;
 				cok->status = 0;
