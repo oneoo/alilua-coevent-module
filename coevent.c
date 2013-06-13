@@ -10,7 +10,7 @@ int clearthreads_handler = 0;
 
 static int lua_co_connect(lua_State *L){
 	{
-		if(!lua_isuserdata(L, 1) || !lua_isstring(L, 2) || !lua_isnumber(L, 3)){
+		if(!lua_isuserdata(L, 1) || !lua_isstring(L, 2)){
 			lua_pushnil(L);
 			lua_pushstring(L, "Error params!");
 			return 2;
@@ -26,12 +26,44 @@ static int lua_co_connect(lua_State *L){
 
 		size_t host_len = 0;
 		const char *host = lua_tolstring(L, 2, &host_len);
-		if(host_len > 60){
+		if(host_len > (host[0] == '/' ? 108 : 60)){
 			lua_pushnil(L);
 			lua_pushstring(L, "hostname length must be <= 60!");
 			return 2;
 		}
-		int port = lua_tonumber(L, 3);
+		int port = 0;
+		int pn = 3;
+		if(host[0] != '/'){
+			port = lua_tonumber(L, 3);
+			if(port < 1){
+				lua_pushnil(L);
+				lua_pushstring(L, "port must be > 0");
+				return 2;
+			}
+			pn = 4;
+		}
+
+		if(lua_gettop(L) >= pn){ /// set keepalive options
+			if(lua_isnumber(L, pn)){
+				cok->pool_size = lua_tonumber(L, pn);
+				if(cok->pool_size < 0 || cok->pool_size > 1000)
+					cok->pool_size = 0;
+				pn++;
+			}
+
+			if(cok->pool_size > 0){
+				size_t len = 0;
+				if(lua_gettop(L) == pn && lua_isstring(L, pn)){
+					const char *key = lua_tolstring(L, pn, &len);
+					cok->pool_key = fnv1a_32(key, len);
+				}else{ /// create a normal key
+					char buf[128];
+					len = sprintf(buf, "%s%s:%d", port > 0 ? "tcp://":"unix://", host, port);
+					cok->pool_key = fnv1a_32(buf, len);
+				}
+			}
+		}
+
 		cok->status = 1;
 		cok->L = L;
 		cok->read_buf = NULL;
@@ -312,7 +344,7 @@ static int _lua_co_close(lua_State *L, cosocket_t *cok){
 	}
 	
 	if(cok->fd > -1){
-		if(cok->pool_size < 1 || add_connect_to_pool(cok->pool_key, cok->pool_size, cok->fd, cok->addr) == 0){
+		if(cok->pool_size < 1 || add_connect_to_pool(cok->pool_key, cok->pool_size, cok->fd) == 0){
 			close(cok->fd);
 		}
 		struct epoll_event ev;
@@ -862,7 +894,6 @@ void add_io_counts(){
 	io_counts+=2;
 }
 
-struct sockaddr_in u4_clear_addr;
 void do_other_jobs(){
 	swop_counter = swop_counter/2;
 	if(io_counts >= 1000){
@@ -881,7 +912,7 @@ void do_other_jobs(){
 	if(timer-chk_time > 0){
 		chk_time = timer;
 		chk_do_timeout_link(epoll_fd);
-		get_connect_in_pool(epoll_fd, u4_clear_addr);
+		get_connect_in_pool(epoll_fd, 0);
 	}
 	/// resume swops
 	{
@@ -955,8 +986,7 @@ int lua_f_startloop(lua_State *L){
 int luaopen_coevent(lua_State *L) {
 	LM = L;
 	epoll_fd = -1;
-	u4_clear_addr.sin_addr.s_addr = 0;
-	
+
 	swop_top = malloc(sizeof(cosocket_swop_t));
 	swop_top->next = NULL;
 	

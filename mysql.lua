@@ -23,7 +23,7 @@ local type = type
 local ipairs = ipairs
 local tonumber = tonumber
 local tostring = tostring
---local print = print
+local print = print
 
 module(...)
 
@@ -471,7 +471,7 @@ end
 
 
 function connect(self, opts)
-	self.opts = opts -- oneoo add
+    self.opts = opts -- oneoo add
     local sock = self.sock
     if not sock then
         return nil, "not initialized"
@@ -498,8 +498,8 @@ function connect(self, opts)
         if not pool then
             pool = concat({user, database, host, port}, ":")
         end
-
-        ok, err = sock:connect(host, port, { pool = pool })
+        ok, err = sock:connect(host, port, opts.pool_size, user..'@'..host..':'..port..'/'..database)
+        --ok, err = sock:connect(host, port, { pool = pool })
 
     else
         local path = opts.path
@@ -511,7 +511,7 @@ function connect(self, opts)
             pool = concat({user, database, path}, ":")
         end
 
-        ok, err = sock:connect("unix:" .. path, { pool = pool })
+        ok, err = sock:connect(path, opts.pool_size, user..'@'..path..'/'..database)
     end
 
     if not ok then
@@ -522,6 +522,15 @@ function connect(self, opts)
 
     if reused and reused > 0 then
         self.state = STATE_CONNECTED
+		--[[
+		-- switch database , but not support switch user ...!!!
+		local bytes, err = send_query(self, "USE "..database)
+		if not bytes then
+			print("failed to send query: ", err)
+		else
+			read_result(self)
+		end
+		]]
         return 1
     end
 
@@ -652,18 +661,18 @@ function connect(self, opts)
 end
 
 
-function set_keepalive(self, ...)
+function setkeepalive(self, ...)
     local sock = self.sock
     if not sock then
         return nil, "not initialized"
     end
 
-    if self.state ~= STATE_CONNECTED then
+    --[[if self.state ~= STATE_CONNECTED then
         return nil, "cannot be reused in the current connection state: "
                     .. (self.state or "nil")
     end
 
-    self.state = nil
+    self.state = nil]]
     return sock:setkeepalive(...)
 end
 

@@ -1,5 +1,6 @@
 #include "coevent.h"
 #include <asm/ioctls.h>
+#include <sys/un.h>
 
 int coevent_setnonblocking(int fd){
 	int opts;
@@ -37,7 +38,7 @@ uint32_t fnv1a_64(const char *data, uint32_t len) {
 
 void *connect_pool_p[2][64] = {{NULL32 NULL32},{NULL32 NULL32}};
 int connect_pool_ttl = 30;
-int get_connect_in_pool(unsigned long pool_key, int epoll_fd, struct sockaddr_in addr){
+int get_connect_in_pool(unsigned long pool_key, int epoll_fd){
 	time(&timer);
 	int p = (timer/connect_pool_ttl)%2;
 	cosocket_connect_pool_t *n = NULL, *m = NULL, *nn = NULL;
@@ -52,16 +53,16 @@ int get_connect_in_pool(unsigned long pool_key, int epoll_fd, struct sockaddr_in
 			n = n->next;
 			if(m->recached == 0){
 				m->recached = 1;
-				nn = connect_pool_p[p][((unsigned long)m->addr.sin_addr.s_addr)%64];
+				nn = connect_pool_p[p][m->pool_key%64];
 				if(nn == NULL){
-					connect_pool_p[p][((unsigned long)m->addr.sin_addr.s_addr)%64] = m;
+					connect_pool_p[p][m->pool_key%64] = m;
 					m->next = NULL;
 					m->uper = NULL;
 				}else{
 					m->uper = NULL;
 					m->next = nn;
 					nn->uper = m;
-					connect_pool_p[p][((unsigned long)m->addr.sin_addr.s_addr)%64] = m;
+					connect_pool_p[p][m->pool_key%64] = m;
 				}
 			}else{
 				epoll_ctl(epoll_fd, EPOLL_CTL_DEL, m->fd, &ev);
@@ -73,12 +74,12 @@ int get_connect_in_pool(unsigned long pool_key, int epoll_fd, struct sockaddr_in
 	}
 
 	/// end
-	if((unsigned long)addr.sin_addr.s_addr == 0)return -1; /// only do clear job
-	int k = ((unsigned long)addr.sin_addr.s_addr)%64;
+	if(pool_key == 0)return -1; /// only do clear job
+	int k = pool_key%64;
 	
 	n = connect_pool_p[p][k];
 	while(n != NULL){
-		if(n->pool_key == pool_key && n->addr.sin_addr.s_addr == addr.sin_addr.s_addr && n->addr.sin_port == addr.sin_port && n->addr.sin_family == addr.sin_family){
+		if(n->pool_key == pool_key){
 			break;
 		}
 		n = (cosocket_connect_pool_t*)n->next;
@@ -105,14 +106,16 @@ int get_connect_in_pool(unsigned long pool_key, int epoll_fd, struct sockaddr_in
 	
 	return -1;
 }
-int add_connect_to_pool(unsigned long pool_key, int pool_size, int fd, struct sockaddr_in addr){
+
+int add_connect_to_pool(unsigned long pool_key, int pool_size, int fd){
+	if(pool_key < 0)return -1;
 	time(&timer);
 	int p = (timer/connect_pool_ttl)%2;
 	//printf("add_connect_to_pool%d %d\n",p, fd);
 	
 	cosocket_connect_pool_t *n = NULL, *m = NULL;
 	
-	int k = ((unsigned long)addr.sin_addr.s_addr)%64;
+	int k = pool_key%64;
 	
 	n = connect_pool_p[p][k];
 	
@@ -121,7 +124,6 @@ int add_connect_to_pool(unsigned long pool_key, int pool_size, int fd, struct so
 		if(m == NULL)
 			return 0;
 		m->recached = 0;
-		memcpy(&m->addr, &addr, sizeof(struct sockaddr_in));
 		m->pool_key = pool_key;
 		m->next = NULL;
 		m->uper = NULL;
@@ -133,7 +135,7 @@ int add_connect_to_pool(unsigned long pool_key, int pool_size, int fd, struct so
 	}else{
 		int in_pool = 0;
 		while(n != NULL){
-			if(n->pool_key == pool_key && n->addr.sin_addr.s_addr == addr.sin_addr.s_addr && n->addr.sin_port == addr.sin_port && n->addr.sin_family == addr.sin_family){
+			if(n->pool_key == pool_key){
 				if(in_pool++ >= pool_size)
 					return 0;
 			}
@@ -144,7 +146,6 @@ int add_connect_to_pool(unsigned long pool_key, int pool_size, int fd, struct so
 					return 0;
 				m->recached = 0;
 				m->pool_key = pool_key;
-				memcpy(&m->addr, &addr, sizeof(struct sockaddr_in));
 				m->next = NULL;
 				m->uper = n;
 				m->fd = fd;
@@ -451,7 +452,7 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 
 	if(found > 0){
 		cok->addr.sin_addr= ips[cok->dns_query_fd%found];
-		int sockfd = get_connect_in_pool(cok->pool_key, epoll_fd, cok->addr);
+		int sockfd = get_connect_in_pool(cok->pool_key, epoll_fd);
 		if(sockfd != -1){
 			cok->fd = sockfd;
 			cok->status = 2;
@@ -467,8 +468,9 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 				printf("%s,%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(cok->L, -1));
 				lua_pop(cok->L, -1);
 			}
+			cok->reusedtimes = 1;
 			return;
-		}else cok->reusedtimes = 1;
+		}
 		
 		if((sockfd=socket(AF_INET,SOCK_STREAM,0))<0){
 			lua_pushnil(cok->L);
@@ -519,48 +521,50 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 	int sockfd = -1;
 
 	bzero(&cok->addr,sizeof(struct sockaddr_in));
-	cok->addr.sin_family=AF_INET;
-	cok->addr.sin_port=htons(port);
-	cok->addr.sin_addr.s_addr=inet_addr(host);//按IP初始化
-	if(cok->addr.sin_addr.s_addr == INADDR_NONE){//如果输入的是域名
-		int is_localhost = (strcmp(host,"localhost")==0);
-		struct hostent *phost = localhost_ent;
-		int in_cache = 0;
-		if(!is_localhost || localhost_ent == NULL){
-			if(is_localhost)
-				phost = (struct hostent*)gethostbyname(host);
-			else{
-				if(get_dns_cache(host, &cok->addr.sin_addr)){
-					in_cache = 1;
-				}else{
-					cok->fd = -1;
-					if(!do_dns_query(epoll_fd, cok, host)){
-						return -3;
+	if(port > 0){
+		cok->addr.sin_family = AF_INET;
+		cok->addr.sin_port=htons(port);
+		cok->addr.sin_addr.s_addr=inet_addr(host);//按IP初始化
+	
+		if(cok->addr.sin_addr.s_addr == INADDR_NONE){//如果输入的是域名
+			int is_localhost = (strcmp(host,"localhost")==0);
+			struct hostent *phost = localhost_ent;
+			int in_cache = 0;
+			if(!is_localhost || localhost_ent == NULL){
+				if(is_localhost)
+					phost = (struct hostent*)gethostbyname(host);
+				else{
+					if(get_dns_cache(host, &cok->addr.sin_addr)){
+						in_cache = 1;
+					}else{
+						cok->fd = -1;
+						if(!do_dns_query(epoll_fd, cok, host)){
+							return -3;
+						}
+						add_to_timeout_link(cok, cok->timeout/2);
+						*ret = EINPROGRESS;
+						return sockfd;
 					}
-					add_to_timeout_link(cok, cok->timeout/2);
-					*ret = EINPROGRESS;
-					return sockfd;
+				}
+				if(is_localhost){
+					if(localhost_ent==NULL)localhost_ent = malloc(sizeof(struct hostent));// size 32 ,and sizeof(cosocket_swop_t) == 32
+					memcpy(localhost_ent, phost, sizeof(struct hostent));
 				}
 			}
-			if(is_localhost){
-				if(localhost_ent==NULL)localhost_ent = malloc(sizeof(struct hostent));// size 32 ,and sizeof(cosocket_swop_t) == 32
-				memcpy(localhost_ent, phost, sizeof(struct hostent));
-			}
-		}
 
-		if(in_cache == 0){
-			if(phost==NULL){
-				close(sockfd);
-				return -2;
+			if(in_cache == 0){
+				if(phost==NULL){
+					close(sockfd);
+					return -2;
+				}
+				
+				cok->addr.sin_addr.s_addr =((struct in_addr*)phost->h_addr)->s_addr;
 			}
-			
-			cok->addr.sin_addr.s_addr =((struct in_addr*)phost->h_addr)->s_addr;
 		}
 	}
-	
-	sockfd = get_connect_in_pool(cok->pool_key, epoll_fd, cok->addr);
+	sockfd = get_connect_in_pool(cok->pool_key, epoll_fd);
 	if(sockfd == -1){
-		if((sockfd=socket(AF_INET,SOCK_STREAM,0))<0){
+		if((sockfd = socket(port > 0 ? AF_INET:AF_UNIX, SOCK_STREAM, 0))<0){
 			herror("Init socket error!");
 			return -1;
 		}
@@ -583,7 +587,16 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 	epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sockfd, &ev);
 	
 	add_to_timeout_link(cok, cok->timeout/2);
-	*ret = connect(sockfd,(struct sockaddr*)&cok->addr, sizeof(struct sockaddr_in));
+	if(port > 0)
+		*ret = connect(sockfd,(struct sockaddr*)&cok->addr, sizeof(struct sockaddr_in));
+	else{ /// connect to unix domain socket
+		struct sockaddr_un un;
+		memset(&un, 0, sizeof(struct sockaddr_un));
+		strcpy(un.sun_path, host);
+		un.sun_family = AF_UNIX;
+		int length = offsetof(struct sockaddr_un,sun_path)+strlen(un.sun_path);
+		*ret = connect(sockfd, (struct sockaddr *)&un, length);
+	}
 
 	return sockfd;
 }

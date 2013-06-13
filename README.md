@@ -116,9 +116,9 @@ Creates and returns a TCP or stream-oriented unix domain socket object, The foll
 * settimeout
 
 ###cok:connect
-**syntax:** ok, err = cok:connect(host, port)
+**syntax:** ok, err = cok:connect(host, port, [pool_size, 'pool_key'])
 
-Attempts to connect a TCP socket object to a remote server
+Attempts to connect a TCP socket object to a remote server.
 
 ###cok:send
 **syntax:** ok, err = cok:send(data)

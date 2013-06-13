@@ -60,7 +60,6 @@ typedef struct{
 } cosocket_link_buf_t;
 
 typedef struct{
-	struct sockaddr_in addr;
 	void *next;
 	void *uper;
 	int fd;
