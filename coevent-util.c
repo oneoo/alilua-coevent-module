@@ -1,45 +1,40 @@
 #include "coevent.h"
-#include <asm/ioctls.h>
-#include <sys/un.h>
 
 int coevent_setnonblocking(int fd){
 	int opts;
 	opts=fcntl(fd, F_GETFL);
-	if (opts < 0) {
-		printf ( "fcntl failed fd:%d %d\n", fd, __LINE__);
+	if (opts < 0)
 		return 0;
-	}
+
 	opts = opts | O_NONBLOCK;
-	if (fcntl(fd, F_SETFL, opts) < 0) {
-		printf ( "fcntl failed %d\n", __LINE__);
+	if (fcntl(fd, F_SETFL, opts) < 0)
 		return 0;
-	}
+
 	return 1;
 }
 
-#define PRIME32 16777619
-#define PRIME64 1099511628211UL
 uint32_t fnv1a_32(const char *data, uint32_t len) {
-  uint32_t rv = 0x811c9dc5U;
-  uint32_t i;
-  for (i = 0; i < len; i++) {
-	rv = (rv ^ (unsigned char)data[i]) * PRIME32;
-  }
-  return rv;
+	uint32_t rv = 0x811c9dc5U;
+	uint32_t i;
+	for (i = 0; i < len; i++) {
+		rv = (rv ^ (unsigned char)data[i]) * 16777619;
+	}
+	return rv;
 }
+
 uint32_t fnv1a_64(const char *data, uint32_t len) {
-  uint64_t rv = 0xcbf29ce484222325UL;
-  uint32_t i;
-  for (i = 0; i < len; i++) {
-	rv = (rv ^ (unsigned char)data[i]) * PRIME64;
-  }
-  return (uint32_t)rv;
+	uint64_t rv = 0xcbf29ce484222325UL;
+	uint32_t i;
+	for (i = 0; i < len; i++) {
+		rv = (rv ^ (unsigned char)data[i]) * 1099511628211UL;
+	}
+	return (uint32_t)rv;
 }
 
 void *connect_pool_p[2][64] = {{NULL32 NULL32},{NULL32 NULL32}};
 int connect_pool_ttl = 30;
 int get_connect_in_pool(unsigned long pool_key, int epoll_fd){
-	time(&timer);
+	//time(&timer);
 	int p = (timer/connect_pool_ttl)%2;
 	cosocket_connect_pool_t *n = NULL, *m = NULL, *nn = NULL;
 	/// clear old caches
@@ -111,7 +106,6 @@ int add_connect_to_pool(unsigned long pool_key, int pool_size, int fd){
 	if(pool_key < 0)return -1;
 	time(&timer);
 	int p = (timer/connect_pool_ttl)%2;
-	//printf("add_connect_to_pool%d %d\n",p, fd);
 	
 	cosocket_connect_pool_t *n = NULL, *m = NULL;
 	
@@ -158,17 +152,10 @@ int add_connect_to_pool(unsigned long pool_key, int pool_size, int fd){
 	}
 }
 
-typedef struct{
-	uint32_t	key1;
-	uint32_t	key2;
-	struct in_addr addr;
-	int		recached;
-	void *		next;
-} dns_cache_item_t;
 void *dns_cache[3][64] = {{NULL32 NULL32},{NULL32 NULL32},{NULL32 NULL32}};
 int dns_cache_ttl = 180;
 int get_dns_cache(const char *name, struct in_addr *addr){
-	time(&timer);
+	//time(&timer);
 	int p = (timer/dns_cache_ttl)%3;
 	dns_cache_item_t *n = NULL, *m = NULL;
 	/// clear old caches
@@ -252,13 +239,16 @@ void add_dns_cache(const char *name, struct in_addr addr, int do_recache){
 }
 
 uint16_t dns_tid = 0;
-#define ARRAY_TO_NUM(p) ((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | (p[3]))
-struct sockaddr_in dns_server;
-struct sockaddr_in dns_server2;
-int dns_ip[4][4];
-int dns_ip_count = 0;
+struct sockaddr_in dns_servers[4];
+int dns_server_count = 0;
 int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
-	if(dns_ip_count == 0){
+	if(dns_server_count == 0){
+		int p1 = 0, p2 = 0, p3 = 0, p4 = 0, i = 0;
+		for(i = 0; i< 4; i++){
+			dns_servers[i].sin_family = AF_INET;
+			dns_servers[i].sin_port = htons(53);
+		}
+		
 		FILE *fp;
 		char line[200] , *p;
 		if((fp = fopen("/etc/resolv.conf" , "r")) == NULL)
@@ -277,19 +267,22 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 					p = strtok(NULL , " ");
 					
 					//p now is the dns ip :)
-					if(sscanf(p, "%d.%d.%d.%d", &dns_ip[dns_ip_count][0], &dns_ip[dns_ip_count][1], &dns_ip[dns_ip_count][2], &dns_ip[dns_ip_count][3]) == 4)
-						dns_ip_count ++;
-					if(dns_ip_count > 1)break;
+					if(sscanf(p, "%d.%d.%d.%d", &p1, &p2, &p3, &p4) == 4){
+						dns_servers[dns_server_count].sin_addr.s_addr = htonl(((p1 << 24) | (p2 << 16) | (p3 << 8) | (p4)));
+						dns_server_count ++;
+					}
+					if(dns_server_count > 1)break;
 				}
 			}
 			fclose(fp);
 		}
-		if(dns_ip_count < 2){
-			dns_ip[dns_ip_count][0]=8;dns_ip[dns_ip_count][1]=8;dns_ip[dns_ip_count][2]=8;dns_ip[dns_ip_count][3]=8;dns_ip_count++;
+		if(dns_server_count < 2){
+			dns_servers[dns_server_count].sin_addr.s_addr = htonl(((8 << 24) | (8 << 16) | (8 << 8) | (8)));dns_server_count++;
 		}
 
-		if(dns_ip_count < 2){
-			dns_ip[dns_ip_count][0]=208;dns_ip[dns_ip_count][1]=67;dns_ip[dns_ip_count][2]=222;dns_ip[dns_ip_count][3]=222;dns_ip_count++;
+		if(dns_server_count < 2){
+			dns_servers[dns_server_count].sin_addr.s_addr = htonl(((208 << 24) | (67 << 16) | (222 << 8) | (222)));
+			dns_server_count++;
 		}
 	}
 	dns_tid += 1;
@@ -307,18 +300,10 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 		cok->dns_query_name[nlen] = '\0';
 	}
 	
-	dns_server.sin_family = AF_INET;
-	dns_server.sin_port = htons(53);
-	dns_server.sin_addr.s_addr = htonl(ARRAY_TO_NUM(dns_ip[cok->dns_query_fd%dns_ip_count]));
-	
-	dns_server2.sin_family = AF_INET;
-	dns_server2.sin_port = htons(53);
-	dns_server2.sin_addr.s_addr = htonl(ARRAY_TO_NUM(dns_ip[(cok->dns_query_fd+1)%dns_ip_count]));
-	
 	int opt = 1;
 	ioctl(cok->dns_query_fd, FIONBIO, &opt);
 
-	ev.events  = EPOLLIN | EPOLLET;
+	ev.events = EPOLLIN | EPOLLET;
 	ev.data.fd = cok->dns_query_fd;
 	ev.data.ptr = cok;
 	epoll_ctl(epoll_fd, EPOLL_CTL_ADD, cok->dns_query_fd, &ev);
@@ -326,17 +311,16 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 	int	i, n, name_len, m;
 	dns_query_header_t *header = NULL;
 
-	const char 	*s;
+	const char *s;
 	char pkt[2048], *p;
 
-	header		     = (dns_query_header_t*) pkt;
-	header->tid	     = dns_tid;
+	header			 = (dns_query_header_t*)pkt;
+	header->tid		 = dns_tid;
 	header->flags	 = htons(0x100); 
 	header->nqueries = htons(1);
 	header->nanswers = 0;
 	header->nauth	 = 0;
 	header->nother	 = 0;
-
 
 	// Encode DNS name 
 	name_len = strlen(name);
@@ -368,8 +352,8 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 
 	n = p - pkt;		/* Total packet length */
 
-	sendto(cok->dns_query_fd, pkt, n, 0, (struct sockaddr *) &dns_server2, sizeof(dns_server2));
-	if ((m = sendto(cok->dns_query_fd, pkt, n, 0, (struct sockaddr *) &dns_server, sizeof(dns_server))) != n) 
+	sendto(cok->dns_query_fd, pkt, n, 0, (struct sockaddr *) &dns_servers[(cok->dns_query_fd+1)%dns_server_count], sizeof(struct sockaddr));
+	if ((m = sendto(cok->dns_query_fd, pkt, n, 0, (struct sockaddr *) &dns_servers[cok->dns_query_fd%dns_server_count], sizeof(struct sockaddr))) != n)
 	{
 		return 0;
 	}
@@ -392,10 +376,8 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 	if (ntohs(header->nqueries) != 1)
 		err = 1;
 
-	if(header->tid != cok->dns_tid){
-		printf("error dns tid !!!!!!!!!!!\n");
-		exit(0);
-	}
+	if(header->tid != cok->dns_tid)
+		err = 1;
 
 	/* Skip host name */
 	if(err == 0)
@@ -483,20 +465,35 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 			return;
 		}
 		cok->fd = sockfd;
-		coevent_setnonblocking(cok->fd);
+		if(!coevent_setnonblocking(cok->fd)){
+			close(cok->fd);
+			lua_pushnil(cok->L);
+			lua_pushstring(cok->L, "Init socket error!");
+			int ret = lua_resume(cok->L, 2);
+			if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
+				printf("%s:%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(cok->L, -1));
+				lua_pop(cok->L, -1);
+			}
+			return;
+		}
 		cok->reusedtimes = 0;
 		
 		ev.data.ptr = cok;
 		ev.events = EPOLLOUT;
 		epoll_ctl(epoll_fd, EPOLL_CTL_ADD, cok->fd, &ev);
 		
-		
-		
 		add_dns_cache(cok->dns_query_name, cok->addr.sin_addr, 0);
 		
 		int ret = connect(cok->fd,(struct sockaddr*)&cok->addr,sizeof(struct sockaddr));
 		if(ret == 0){
 			///////// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! connected /////
+			lua_pushboolean(cok->L, 1);
+			int ret = lua_resume(cok->L, 1);
+			if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
+				printf("%s:%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(cok->L, -1));
+				lua_pop(cok->L, -1);
+			}
+			
 		}
 		return;
 	}
@@ -564,11 +561,13 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 	}
 	sockfd = get_connect_in_pool(cok->pool_key, epoll_fd);
 	if(sockfd == -1){
-		if((sockfd = socket(port > 0 ? AF_INET:AF_UNIX, SOCK_STREAM, 0))<0){
-			herror("Init socket error!");
+		if((sockfd = socket(port > 0 ? AF_INET:AF_UNIX, SOCK_STREAM, 0)) < 0){
 			return -1;
 		}
-		coevent_setnonblocking(sockfd);
+		if(!coevent_setnonblocking(sockfd)){
+			close(sockfd);
+			return -1;
+		}
 		cok->reusedtimes = 0;
 	}else{
 		struct epoll_event ev;
@@ -601,11 +600,6 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 	return sockfd;
 }
 
-static long longtime() {
-	struct timeb t;
-	ftime(&t);
-	return 1000 * t.time + t.millitm;
-}
 static void *timeout_links[64] = {NULL32 NULL32};
 int add_to_timeout_link(cosocket_t *cok, int timeout){
 	int p = ((long)cok)%64;
@@ -693,7 +687,7 @@ int chk_do_timeout_link(int epoll_fd){
 		
 		_tl = timeout_links[i];
 		while(_tl){
-			_ttl =  _tl->next;
+			_ttl = _tl->next;
 			if(nt >= _tl->timeout){
 				_utl = _tl->uper;
 				_ntl = _tl->next;
@@ -710,7 +704,7 @@ int chk_do_timeout_link(int epoll_fd){
 				cosocket_t *cok = _tl->cok;
 				free(_tl);
 				
-				printf("fd timeout %d %d  %ld\n", cok->fd,cok->dns_query_fd, _tl->timeout);
+				//printf("fd timeout %d %d %ld\n", cok->fd,cok->dns_query_fd, _tl->timeout);
 				
 				if(cok->dns_query_fd > -1){
 					epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->dns_query_fd, &ev);
@@ -729,7 +723,7 @@ int chk_do_timeout_link(int epoll_fd){
 				lua_pushstring(cok->L, "timeout!");
 				int ret = lua_resume(cok->L, 2);
 				if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
-					printf("%s:%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(cok->L, -1));
+					//printf("%s:%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(cok->L, -1));
 					if(lua_gettop(cok->L) > 1){
 						lua_replace(cok->L, 2);
 						lua_pushnil(cok->L);
@@ -748,13 +742,21 @@ int chk_do_timeout_link(int epoll_fd){
 	}
 }
 
+long longtime(){
+	struct timeb t;
+	ftime(&t);
+	return 1000 * t.time + t.millitm;
+}
+
 int lua_f_time(lua_State *L){
 	lua_pushnumber(L, time(NULL));
 	return 1;
 }
 
 int lua_f_longtime(lua_State *L){
-	lua_pushnumber(L, longtime());
+	struct timeb t;
+	ftime(&t);
+	lua_pushnumber(L, 1000 * t.time + t.millitm);
 	return 1;
 }
 
@@ -1092,6 +1094,7 @@ int lua_f_sha1bin(lua_State *L){
 	lua_pushlstring(L, (char *) sha_buf, sizeof(sha_buf));
 	return 1;
 }
+
 int lua_f_base64encode(lua_State *L){
 	const char *src = NULL;
 	size_t slen = 0;
@@ -1107,6 +1110,7 @@ int lua_f_base64encode(lua_State *L){
 	free(end);
 	return 1;
 }
+
 int lua_f_base64decode(lua_State *L){
 	const char *src = NULL;
 	size_t slen = 0;
@@ -1123,125 +1127,124 @@ int lua_f_base64decode(lua_State *L){
 	return 1;
 }
 
-#define ESCAPE_URI            0
-#define ESCAPE_ARGS           1
-#define ESCAPE_URI_COMPONENT  2
-#define ESCAPE_HTML           3
-#define ESCAPE_REFRESH        4
-#define ESCAPE_MEMCACHED      5
-#define ESCAPE_MAIL_AUTH      6
-#define UNESCAPE_URI       1
-#define UNESCAPE_REDIRECT  2
-#define UNESCAPE_URI_COMPONENT  0
-uintptr_t
-ngx_http_lua_escape_uri(u_char *dst, u_char *src, size_t size, unsigned int type){
-	unsigned int      n;
-	uint32_t       *escape;
-	static u_char   hex[] = "0123456789abcdef";
+#define ESCAPE_URI 0
+#define ESCAPE_ARGS 1
+#define ESCAPE_URI_COMPONENT 2
+#define ESCAPE_HTML 3
+#define ESCAPE_REFRESH 4
+#define ESCAPE_MEMCACHED 5
+#define ESCAPE_MAIL_AUTH 6
+#define UNESCAPE_URI 1
+#define UNESCAPE_REDIRECT 2
+#define UNESCAPE_URI_COMPONENT 0
+uintptr_t ngx_http_lua_escape_uri(u_char *dst, u_char *src, size_t size, unsigned int type){
+	unsigned int n;
+	uint32_t *escape;
+	static u_char hex[] = "0123456789abcdef";
 
 					/* " ", "#", "%", "?", %00-%1F, %7F-%FF */
 
-	static uint32_t   uri[] = {
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+	static uint32_t uri[] = {
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
 
-					/* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
-		0xfc00886d, /* 1111 1100 0000 0000  1000 1000 0110 1101 */
+					/* ?>=< ;:98 7654 3210 /.-, +*)( '&%$ #"! */
+		0xfc00886d, /* 1111 1100 0000 0000 1000 1000 0110 1101 */
 
-					/* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
-		0x78000000, /* 0111 1000 0000 0000  0000 0000 0000 0000 */
+					/* _^]\ [ZYX WVUT SRQP ONML KJIH GFED CBA@ */
+		0x78000000, /* 0111 1000 0000 0000 0000 0000 0000 0000 */
 
-					/*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
-		0xa8000000, /* 1010 1000 0000 0000  0000 0000 0000 0000 */
+					/* ~}| {zyx wvut srqp onml kjih gfed cba` */
+		0xa8000000, /* 1010 1000 0000 0000 0000 0000 0000 0000 */
 
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-		0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
+		0xffffffff /* 1111 1111 1111 1111 1111 1111 1111 1111 */
 	};
 
 					/* " ", "#", "%", "+", "?", %00-%1F, %7F-%FF */
 
-	static uint32_t   args[] = {
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+	static uint32_t args[] = {
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
 
-					/* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
-		0x80000829, /* 1000 0000 0000 0000  0000 1000 0010 1001 */
+					/* ?>=< ;:98 7654 3210 /.-, +*)( '&%$ #"! */
+		0x80000829, /* 1000 0000 0000 0000 0000 1000 0010 1001 */
 
-					/* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
-		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+					/* _^]\ [ZYX WVUT SRQP ONML KJIH GFED CBA@ */
+		0x00000000, /* 0000 0000 0000 0000 0000 0000 0000 0000 */
 
-					/*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
-		0x80000000, /* 1000 0000 0000 0000  0000 0000 0000 0000 */
+					/* ~}| {zyx wvut srqp onml kjih gfed cba` */
+		0x80000000, /* 1000 0000 0000 0000 0000 0000 0000 0000 */
 
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-		0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
+		0xffffffff /* 1111 1111 1111 1111 1111 1111 1111 1111 */
 	};
 
 					/* " ", "#", """, "%", "'", %00-%1F, %7F-%FF */
 
-	static uint32_t   html[] = {
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+	static uint32_t html[] = {
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
 
-					/* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
-		0x000000ad, /* 0000 0000 0000 0000  0000 0000 1010 1101 */
+					/* ?>=< ;:98 7654 3210 /.-, +*)( '&%$ #"! */
+		0x000000ad, /* 0000 0000 0000 0000 0000 0000 1010 1101 */
 
-					/* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
-		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+					/* _^]\ [ZYX WVUT SRQP ONML KJIH GFED CBA@ */
+		0x00000000, /* 0000 0000 0000 0000 0000 0000 0000 0000 */
 
-					/*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
-		0x80000000, /* 1000 0000 0000 0000  0000 0000 0000 0000 */
+					/* ~}| {zyx wvut srqp onml kjih gfed cba` */
+		0x80000000, /* 1000 0000 0000 0000 0000 0000 0000 0000 */
 
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-		0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
+		0xffffffff /* 1111 1111 1111 1111 1111 1111 1111 1111 */
 	};
 
 					/* " ", """, "%", "'", %00-%1F, %7F-%FF */
 
-	static uint32_t   refresh[] = {
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+	static uint32_t refresh[] = {
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
 
-					/* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
-		0x00000085, /* 0000 0000 0000 0000  0000 0000 1000 0101 */
+					/* ?>=< ;:98 7654 3210 /.-, +*)( '&%$ #"! */
+		0x00000085, /* 0000 0000 0000 0000 0000 0000 1000 0101 */
 
-					/* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
-		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+					/* _^]\ [ZYX WVUT SRQP ONML KJIH GFED CBA@ */
+		0x00000000, /* 0000 0000 0000 0000 0000 0000 0000 0000 */
 
-					/*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
-		0x80000000, /* 1000 0000 0000 0000  0000 0000 0000 0000 */
+					/* ~}| {zyx wvut srqp onml kjih gfed cba` */
+		0x80000000, /* 1000 0000 0000 0000 0000 0000 0000 0000 */
 
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
-		0xffffffff  /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
+		0xffffffff /* 1111 1111 1111 1111 1111 1111 1111 1111 */
 	};
 
 					/* " ", "%", %00-%1F */
 
-	static uint32_t   memcached[] = {
-		0xffffffff, /* 1111 1111 1111 1111  1111 1111 1111 1111 */
+	static uint32_t memcached[] = {
+		0xffffffff, /* 1111 1111 1111 1111 1111 1111 1111 1111 */
 
-					/* ?>=< ;:98 7654 3210  /.-, +*)( '&%$ #"!  */
-		0x00000021, /* 0000 0000 0000 0000  0000 0000 0010 0001 */
+					/* ?>=< ;:98 7654 3210 /.-, +*)( '&%$ #"! */
+		0x00000021, /* 0000 0000 0000 0000 0000 0000 0010 0001 */
 
-					/* _^]\ [ZYX WVUT SRQP  ONML KJIH GFED CBA@ */
-		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+					/* _^]\ [ZYX WVUT SRQP ONML KJIH GFED CBA@ */
+		0x00000000, /* 0000 0000 0000 0000 0000 0000 0000 0000 */
 
-					/*  ~}| {zyx wvut srqp  onml kjih gfed cba` */
-		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+					/* ~}| {zyx wvut srqp onml kjih gfed cba` */
+		0x00000000, /* 0000 0000 0000 0000 0000 0000 0000 0000 */
 
-		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
-		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
-		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
-		0x00000000, /* 0000 0000 0000 0000  0000 0000 0000 0000 */
+		0x00000000, /* 0000 0000 0000 0000 0000 0000 0000 0000 */
+		0x00000000, /* 0000 0000 0000 0000 0000 0000 0000 0000 */
+		0x00000000, /* 0000 0000 0000 0000 0000 0000 0000 0000 */
+		0x00000000, /* 0000 0000 0000 0000 0000 0000 0000 0000 */
 	};
 
 					/* mail_auth is the same as memcached */
 
-	static uint32_t  *map[] =
+	static uint32_t *map[] =
 		{ uri, args, html, refresh, memcached, memcached };
 
 
@@ -1283,7 +1286,7 @@ ngx_http_lua_escape_uri(u_char *dst, u_char *src, size_t size, unsigned int type
 
 /* XXX we also decode '+' to ' ' */
 void ngx_http_lua_unescape_uri(u_char **dst, u_char **src, size_t size, unsigned int type){
-	u_char  *d, *s, ch, c, decoded;
+	u_char *d, *s, ch, c, decoded;
 	enum {
 		sw_usual = 0,
 		sw_quoted,
@@ -1414,9 +1417,9 @@ done:
 }
 
 int lua_f_escape_uri(lua_State *L){
-	size_t                   len, dlen;
-	uintptr_t                escape;
-	u_char                  *src, *dst;
+	size_t len, dlen;
+	uintptr_t escape;
+	u_char *src, *dst;
 
 	if (lua_gettop(L) != 1) {
 		return luaL_error(L, "expecting one argument");

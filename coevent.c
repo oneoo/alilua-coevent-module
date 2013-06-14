@@ -1,9 +1,5 @@
-//gcc -g -o cotest cotest.c cotest-util.c -llua -ldl -lm -lssl -lcrypto && ./cotest
-/*
-gcc -fPIC -c comodule.c
-gcc -shared coevent.o coevent-util.o -o coevent.so -lssl -lcrypto
-*/
 #include "coevent.h"
+
 int epoll_fd = 0;
 lua_State *LM = NULL;
 int clearthreads_handler = 0;
@@ -108,7 +104,7 @@ static int lua_co_connect(lua_State *L){
 			return 2;
 		}
 	}
-	//printf("yield\n");
+
 	return lua_yield(L, 0);
 }
 
@@ -138,6 +134,10 @@ static int lua_co_send(lua_State *L){
 					cok->send_buf = cok->_send_buf;
 				}else{
 					cok->send_buf_need_free = large_malloc(cok->send_buf_len);
+					if(!cok->send_buf_need_free){
+						printf("malloc error @%s:%d\n", __FILE__, __LINE__);
+						exit(1);
+					}
 					lua_copy_str_in_table(L, 2, cok->send_buf_need_free);
 					cok->send_buf = cok->send_buf_need_free;
 				}
@@ -175,6 +175,7 @@ int lua_co_read_(cosocket_t *cok){
 		}
 		return 0;
 	}
+	
 	size_t be_copy = cok->buf_read_len;
 	if(cok->buf_read_len == -1){ // read line
 		int i = 0;
@@ -203,17 +204,17 @@ int lua_co_read_(cosocket_t *cok){
 	}
 	
 	if(cok->status == 0){
-//printf("%d %d\n", be_copy, cok->total_buf_len);
 		if(be_copy > cok->total_buf_len)
 			be_copy = cok->total_buf_len;
 	}
 
 	int kk = 0;
 	if(be_copy > 0 && cok->total_buf_len >= be_copy){
-//printf("lua read %ld, has: %ld last:%d\n", be_copy, cok->total_buf_len, cok->last_buf->buf_len);
-		//luaL_Buffer b;luaL_buffinit(cok->L, &b);
 		char *buf2lua = large_malloc(be_copy);
-		if(!buf2lua){printf("error malloc\n");exit(1);}
+		if(!buf2lua){
+			printf("malloc error @%s:%d\n", __FILE__, __LINE__);
+			exit(1);
+		}
 		size_t copy_len = be_copy;
 		size_t copy_ed = 0;
 		int this_copy_len = 0;
@@ -221,7 +222,6 @@ int lua_co_read_(cosocket_t *cok){
 		
 		while(cok->read_buf){
 			this_copy_len = (cok->read_buf->buf_len+copy_ed > copy_len ? copy_len - copy_ed : cok->read_buf->buf_len);
-			//luaL_addlstring(&b, cok->read_buf->buf, this_copy_len);
 			if(this_copy_len > 0){
 				memcpy(buf2lua+copy_ed, cok->read_buf->buf, this_copy_len);
 				copy_ed += this_copy_len;
@@ -229,15 +229,12 @@ int lua_co_read_(cosocket_t *cok){
 				memmove(cok->read_buf->buf, cok->read_buf->buf+this_copy_len, cok->read_buf->buf_len - this_copy_len);
 				cok->read_buf->buf_len -= this_copy_len;
 			}
-//printf("%d %d %ld\n", cok->read_buf->buf_len, this_copy_len, be_copy+(4096-be_copy%4096));
-//printf("total %d copy_ed %d\n", cok->total_buf_len, this_copy_len);
+
 			if(copy_ed >= be_copy){ /// not empty
 				cok->total_buf_len -= copy_ed;
-//printf("push %d\n", be_copy);
-				//luaL_pushresult(&b);
 				if(cok->buf_read_len == -1){ /// read line , cut the \r \n
-					if(buf2lua[be_copy-1] == '\n')be_copy-=1;
-					if(buf2lua[be_copy-1] == '\r')be_copy-=1;
+					if(buf2lua[be_copy-1] == '\n')be_copy -= 1;
+					if(buf2lua[be_copy-1] == '\r')be_copy -= 1;
 				}
 
 				lua_pushlstring(cok->L, buf2lua, be_copy);
@@ -376,7 +373,6 @@ static int lua_co_close(lua_State *L){
 static int lua_co_gc(lua_State *L){
 	cosocket_t *cok = (cosocket_t *)lua_touserdata(L, 1);
 	_lua_co_close(L, cok);
-//printf("0x%x gc\n", cok);
 	return 0;
 }
 
@@ -397,6 +393,7 @@ int lua_co_settimeout(lua_State *L){
 	
 	return 0;
 }
+
 int lua_co_setkeepalive(lua_State *L){
 	if(!lua_isuserdata(L, 1) || !lua_isnumber(L, 2)){
 		lua_pushnil(L);
@@ -407,6 +404,8 @@ int lua_co_setkeepalive(lua_State *L){
 	cosocket_t *cok = (cosocket_t *)lua_touserdata(L, 1);
 	
 	cok->pool_size = lua_tonumber(L, 2);
+	if(cok->pool_size < 0 || cok->pool_size > 1000)
+		cok->pool_size = 0;
 	if(lua_gettop(L) == 3 && lua_isstring(L, 3)){
 		size_t len = 0;
 		const char *key = lua_tolstring(L, 3, &len);
@@ -449,7 +448,7 @@ static const luaL_reg M[] =
 };
 
 static int lua_co_tcp(lua_State *L){
-	luaL_checkstack(L, 1, "not enough stack to create connection");
+	//luaL_checkstack(L, 1, "not enough stack to create connection");
 	cosocket_t *cok = NULL;
 	cok = (cosocket_t*)lua_newuserdata(L, sizeof(cosocket_t));
 	cok->type = 2;
@@ -470,7 +469,7 @@ static int lua_co_tcp(lua_State *L){
 	if (luaL_newmetatable(L, "cosocket"))
 	{
 		/* Module table to be set as upvalue */
-		luaL_checkstack(L, 1, "not enough stack to register connection MT");
+		//luaL_checkstack(L, 1, "not enough stack to register connection MT");
 
 		lua_pushvalue(L, lua_upvalueindex(1));
 		setfuncs(L, M, 1);
@@ -534,6 +533,7 @@ int lua_f_coroutine_resume_waiting(lua_State *L){
 	if(LUA_TLIGHTUSERDATA == lua_type(L, -1)){
 		cosocket_swop_t *swop = malloc(sizeof(cosocket_swop_t));
 		if(swop == NULL){
+			printf("malloc error @%s:%d\n", __FILE__, __LINE__);
 			exit(1);
 		}
 		swop->L = L;
@@ -606,8 +606,8 @@ lua_State *job_L = NULL;
 int io_counts = 0;
 int coevent_epoll_job(struct epoll_event ev){
 	cosocket_t* cok = ev.data.ptr;
-	int n = 0;
-	io_counts+=1;
+	int n = 0, ret = 0;
+	io_counts += 1;
 	
 	if(cok->dns_query_fd > -1){ /// is dns query
 		unsigned char pkt[2048];
@@ -628,7 +628,15 @@ init_read_buf:
 		if(!cok->read_buf || (cok->last_buf->buf_len >= cok->last_buf->buf_size)){/// init read buf
 			cosocket_link_buf_t *nbuf = NULL;
 			nbuf = malloc(sizeof(cosocket_link_buf_t));
-			nbuf->buf = malloc(4096);
+			if(nbuf == NULL){
+				printf("malloc error @%s:%d\n", __FILE__, __LINE__);
+				exit(1);
+			}
+			nbuf->buf = large_malloc(4096);
+			if(!nbuf->buf){
+				printf("malloc error @%s:%d\n", __FILE__, __LINE__);
+				exit(1);
+			}
 			nbuf->buf_size = 4096;
 			nbuf->buf_len = 0;
 			nbuf->next = NULL;
@@ -648,10 +656,11 @@ init_read_buf:
 		}
 		
 		if(n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)){
-			if(!del_in_timeout_link(cok)){// && cok->in_read_action == 1
+			/*if(!del_in_timeout_link(cok)){// && cok->in_read_action == 1
 				printf("del error %d\n", __LINE__);
-				//exit(1);
-			}
+				exit(1);
+			}*/
+			del_in_timeout_link(cok);
 
 			{
 				cok->status = 0;
@@ -663,7 +672,6 @@ init_read_buf:
 			}
 			if(cok->in_read_action == 1){
 				cok->in_read_action = 0;
-				int ret = 0;
 				int rt = lua_co_read_(cok);
 				if(rt > 0){
 					ret = lua_resume(cok->L, rt);
@@ -698,16 +706,13 @@ init_read_buf:
 				int rt = lua_co_read_(cok);
 				if(rt > 0){
 					cok->in_read_action = 0;
-					if(!del_in_timeout_link(cok)){
+					/*if(!del_in_timeout_link(cok)){
 						printf("del error %d\n", __LINE__);
 						exit(1);
-					}
-					/*ev.data.ptr = cok;
-					ev.events = EPOLLPRI;
-					if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, cok->fd, &ev) == -1)
-						printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));*/
+					}*/
+					del_in_timeout_link(cok);
 
-					int ret = lua_resume(cok->L, rt);
+					ret = lua_resume(cok->L, rt);
 					if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 						printf("%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring(cok->L, -1));
 						//lua_pop(cok->L, -1);
@@ -731,7 +736,7 @@ init_read_buf:
 						lua_f_coroutine_resume_waiting(cok->L);
 					}
 				}
-			}//else{printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!aaaaa\n");}
+			}
 		}
 	}else if(ev.events & EPOLLOUT){
 //printf("fd:%d EPOLLOUT\n", cok->fd);
@@ -741,11 +746,12 @@ init_read_buf:
 			socklen_t result_len = sizeof(result);
 			if (getsockopt(cok->fd, SOL_SOCKET, SO_ERROR, &result, &result_len) < 0)
 				return 0;
-			if(!del_in_timeout_link(cok)){
+			/*if(!del_in_timeout_link(cok)){
 				printf("del error %d  fd %d\n", __LINE__, cok->fd);
 				exit(1);
-			}
-			if (result != 0) {
+			}*/
+			del_in_timeout_link(cok);
+			if(result != 0){
 				{
 					epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
 //printf("0x%x close fd %d   l:%d\n", cok->L, cok->fd, __LINE__);
@@ -755,7 +761,7 @@ init_read_buf:
 				}
 				lua_pushnil(cok->L);
 				lua_pushstring(cok->L, "Connect error!(2)");
-				int ret = lua_resume(cok->L, 2);
+				ret = lua_resume(cok->L, 2);
 				if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 					printf("%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring(cok->L, -1));
 					//lua_pop(cok->L, -1);
@@ -779,7 +785,7 @@ init_read_buf:
 						printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
 				}
 				lua_pushboolean(cok->L, 1);
-				int ret = lua_resume(cok->L, 1);
+				ret = lua_resume(cok->L, 1);
 				if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 					printf("%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring(cok->L, -1));
 					//lua_pop(cok->L, -1);
@@ -823,10 +829,11 @@ init_read_buf:
 					}
 				}
 				
-				if(!del_in_timeout_link(cok)){
+				/*if(!del_in_timeout_link(cok)){
 					printf("del error %d\n", __LINE__);
 					exit(1);
-				}
+				}*/
+				del_in_timeout_link(cok);
 
 				if(cok->send_buf_ed == cok->send_buf_len)
 					lua_pushnumber(cok->L, cok->send_buf_ed);
@@ -834,7 +841,7 @@ init_read_buf:
 					lua_pushnil(cok->L);
 				else
 					lua_pushboolean(cok->L, 0);
-				int ret = lua_resume(cok->L, 1);
+				ret = lua_resume(cok->L, 1);
 				if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 					printf("%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring(cok->L, -1));
 					//lua_pop(cok->L, -1);
@@ -852,9 +859,9 @@ init_read_buf:
 			}
 		}
 	}else if(ev.events & EPOLLPRI){
-printf("fd:%d EPOLLPRI\n", cok->fd);
+//printf("fd:%d EPOLLPRI\n", cok->fd);
 	}else{
-printf("fd:%d other\n", cok->fd);
+//printf("fd:%d other\n", cok->fd);
 		del_in_timeout_link(cok);
 		{
 			epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
@@ -865,7 +872,7 @@ printf("fd:%d other\n", cok->fd);
 
 		lua_pushnil(cok->L);
 		lua_pushstring(cok->L, "Connect error!(1)");
-		int ret = lua_resume(cok->L, 2);
+		ret = lua_resume(cok->L, 2);
 		if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 			printf("%s:%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(cok->L, -1));
 			//lua_pop(cok->L, -1);
@@ -883,17 +890,17 @@ printf("fd:%d other\n", cok->fd);
 	}
 }
 
-time_t chk_time = 0;
-void set_epoll_fd(int fd){
+void set_epoll_fd(int fd){ /// for alilua-serv
 	epoll_fd = fd;
 	lua_getglobal(LM, "clearthreads");
 	clearthreads_handler = luaL_ref(LM, LUA_REGISTRYINDEX);
 }
 
-void add_io_counts(){
-	io_counts+=2;
+void add_io_counts(){ /// for alilua-serv
+	io_counts += 2;
 }
 
+time_t chk_time = 0;
 void do_other_jobs(){
 	swop_counter = swop_counter/2;
 	if(io_counts >= 1000){
@@ -901,7 +908,7 @@ void do_other_jobs(){
 		if(clearthreads_handler != 0){
 			lua_rawgeti(LM, LUA_REGISTRYINDEX, clearthreads_handler);
 			if(lua_pcall(LM, 0, 0, 0)){
-				printf("%d isstring: %s\n", __LINE__, lua_tostring(LM, -1));
+				printf("%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring(LM, -1));
 				lua_pop(LM, -1);
 				exit(0);
 			}
@@ -964,8 +971,7 @@ static const struct luaL_reg cosocket_methods[] =
 
 int lua_f_startloop(lua_State *L){
 	if(epoll_fd == -1)epoll_fd = epoll_create(128);
-	luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1), 1,
-	"Lua function expected");
+	luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1), 1, "Lua function expected");
 	
 	job_L = lua_newthread(L);
 	
@@ -983,7 +989,7 @@ int lua_f_startloop(lua_State *L){
 	return 0;
 }
 
-int luaopen_coevent(lua_State *L) {
+int luaopen_coevent(lua_State *L){
 	LM = L;
 	epoll_fd = -1;
 
