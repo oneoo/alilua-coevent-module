@@ -33,7 +33,7 @@ uint32_t fnv1a_64(const char *data, uint32_t len) {
 
 void *connect_pool_p[2][64] = {{NULL32 NULL32},{NULL32 NULL32}};
 int connect_pool_ttl = 30;
-int get_connect_in_pool(unsigned long pool_key, int epoll_fd){
+int get_connect_in_pool(int epoll_fd, unsigned long pool_key){
 	//time(&timer);
 	int p = (timer/connect_pool_ttl)%2;
 	cosocket_connect_pool_t *n = NULL, *m = NULL, *nn = NULL;
@@ -95,17 +95,42 @@ int get_connect_in_pool(unsigned long pool_key, int epoll_fd){
 		
 		int fd = n->fd;
 		free(n);
-		//printf("get fd in pool%d %d key:%ul\n",p, fd, pool_key);
+		//printf("get fd in pool%d %d key:%d\n",p, fd, k);
 		return fd;
 	}
 	
 	return -1;
 }
 
-int add_connect_to_pool(unsigned long pool_key, int pool_size, int fd){
+void del_connect_in_pool(int epoll_fd, cosocket_connect_pool_t* n){
+	int k = n->pool_key%64;
+	if(n == connect_pool_p[0][k]){
+		connect_pool_p[0][k] = n->next;
+		if(n->next){
+			((cosocket_connect_pool_t*)n->next)->uper = NULL;
+		}
+	}else if(n == connect_pool_p[1][k]){
+		connect_pool_p[1][k] = n->next;
+		if(n->next){
+			((cosocket_connect_pool_t*)n->next)->uper = NULL;
+		}
+	}else{
+		((cosocket_connect_pool_t*)n->uper)->next = n->next;
+		if(n->next)
+			((cosocket_connect_pool_t*)n->next)->uper = n->uper;
+	}
+	
+	struct epoll_event ev;
+	epoll_ctl(epoll_fd, EPOLL_CTL_DEL, n->fd, &ev);
+	close(n->fd);
+	free(n);
+}
+
+int add_connect_to_pool(int epoll_fd, unsigned long pool_key, int pool_size, int fd){
 	if(pool_key < 0)return -1;
 	time(&timer);
 	int p = (timer/connect_pool_ttl)%2;
+	struct epoll_event ev;
 	
 	cosocket_connect_pool_t *n = NULL, *m = NULL;
 	
@@ -117,6 +142,7 @@ int add_connect_to_pool(unsigned long pool_key, int pool_size, int fd){
 		m = malloc(sizeof(cosocket_connect_pool_t));
 		if(m == NULL)
 			return 0;
+		m->type = EPOLL_PTR_TYPE_COSOCKET_WAIT;
 		m->recached = 0;
 		m->pool_key = pool_key;
 		m->next = NULL;
@@ -124,6 +150,11 @@ int add_connect_to_pool(unsigned long pool_key, int pool_size, int fd){
 		m->fd = fd;
 	
 		connect_pool_p[p][k] = m;
+		
+		ev.data.ptr = m;
+		ev.events = EPOLLIN;
+		if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, m->fd, &ev) == -1)
+			printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
 		
 		return 1;
 	}else{
@@ -138,6 +169,7 @@ int add_connect_to_pool(unsigned long pool_key, int pool_size, int fd){
 				m = malloc(sizeof(cosocket_connect_pool_t));
 				if(m == NULL)
 					return 0;
+				m->type = EPOLL_PTR_TYPE_COSOCKET_WAIT;
 				m->recached = 0;
 				m->pool_key = pool_key;
 				m->next = NULL;
@@ -145,6 +177,12 @@ int add_connect_to_pool(unsigned long pool_key, int pool_size, int fd){
 				m->fd = fd;
 	
 				n->next = m;
+				
+				ev.data.ptr = m;
+				ev.events = EPOLLIN;
+				if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, m->fd, &ev) == -1)
+					printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
+		
 				return 1;
 			}
 			n = (cosocket_connect_pool_t*)n->next;
@@ -241,6 +279,7 @@ void add_dns_cache(const char *name, struct in_addr addr, int do_recache){
 uint16_t dns_tid = 0;
 struct sockaddr_in dns_servers[4];
 int dns_server_count = 0;
+char pkt[2048];
 int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 	if(dns_server_count == 0){
 		int p1 = 0, p2 = 0, p3 = 0, p4 = 0, i = 0;
@@ -312,7 +351,7 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 	dns_query_header_t *header = NULL;
 
 	const char *s;
-	char pkt[2048], *p;
+	char *p;
 
 	header			 = (dns_query_header_t*)pkt;
 	header->tid		 = dns_tid;
@@ -326,7 +365,7 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 	name_len = strlen(name);
 	p = (char *) &header->data;	/* For encoding host name into packet */
 
-	do {
+	do{
 		if ((s = strchr(name, '.')) == NULL)
 			s = name + name_len;
 
@@ -353,7 +392,7 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 	n = p - pkt;		/* Total packet length */
 
 	sendto(cok->dns_query_fd, pkt, n, 0, (struct sockaddr *) &dns_servers[(cok->dns_query_fd+1)%dns_server_count], sizeof(struct sockaddr));
-	if ((m = sendto(cok->dns_query_fd, pkt, n, 0, (struct sockaddr *) &dns_servers[cok->dns_query_fd%dns_server_count], sizeof(struct sockaddr))) != n)
+	if((m = sendto(cok->dns_query_fd, pkt, n, 0, (struct sockaddr *) &dns_servers[cok->dns_query_fd%dns_server_count], sizeof(struct sockaddr))) != n)
 	{
 		return 0;
 	}
@@ -434,15 +473,10 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 
 	if(found > 0){
 		cok->addr.sin_addr= ips[cok->dns_query_fd%found];
-		int sockfd = get_connect_in_pool(cok->pool_key, epoll_fd);
+		int sockfd = get_connect_in_pool(epoll_fd, cok->pool_key);
 		if(sockfd != -1){
 			cok->fd = sockfd;
 			cok->status = 2;
-			
-			struct epoll_event ev;
-			ev.data.ptr = cok;
-			ev.events = EPOLLOUT;
-			epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sockfd, &ev);
 
 			lua_pushboolean(cok->L, 1);
 			int ret = lua_resume(cok->L, 1);
@@ -559,7 +593,7 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 			}
 		}
 	}
-	sockfd = get_connect_in_pool(cok->pool_key, epoll_fd);
+	sockfd = get_connect_in_pool(epoll_fd, cok->pool_key);
 	if(sockfd == -1){
 		if((sockfd = socket(port > 0 ? AF_INET:AF_UNIX, SOCK_STREAM, 0)) < 0){
 			return -1;
@@ -570,10 +604,6 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 		}
 		cok->reusedtimes = 0;
 	}else{
-		struct epoll_event ev;
-		ev.data.ptr = cok;
-		ev.events = EPOLLOUT;
-		epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sockfd, &ev);
 		cok->reusedtimes = 1;
 		*ret = 0;
 		return sockfd;
@@ -950,11 +980,11 @@ unsigned char *lua_copy_str_in_table(lua_State *L, int index, u_char *dst){
 
 #define base64_encoded_length(len) (((len + 2) / 3) * 4)
 #define base64_decoded_length(len) (((len + 3) / 4) * 3)
+static char basis64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 static int base64encode(unsigned char *dst, const unsigned char *src, int len){
 	unsigned char *d;
 	const unsigned char *s;
-	static char basis64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
+	
 	s = src;
 	d = dst;
 
@@ -1076,8 +1106,8 @@ static int base64decode_url(unsigned char *dst, const unsigned char *src, size_t
 	return base64_decode_internal(dst, src, slen, basis64);
 }
 
+char sha_buf[SHA_DIGEST_LENGTH];
 int lua_f_sha1bin(lua_State *L){
-	char sha_buf[SHA_DIGEST_LENGTH];
 	const char *src = NULL;
 	size_t slen = 0;
 	if (lua_isnil(L, 1)) {

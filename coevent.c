@@ -3,6 +3,7 @@
 int epoll_fd = 0;
 lua_State *LM = NULL;
 int clearthreads_handler = 0;
+unsigned char temp_buf[4096];
 
 static int lua_co_connect(lua_State *L){
 	{
@@ -53,9 +54,8 @@ static int lua_co_connect(lua_State *L){
 					const char *key = lua_tolstring(L, pn, &len);
 					cok->pool_key = fnv1a_32(key, len);
 				}else{ /// create a normal key
-					char buf[128];
-					len = sprintf(buf, "%s%s:%d", port > 0 ? "tcp://":"unix://", host, port);
-					cok->pool_key = fnv1a_32(buf, len);
+					len = sprintf(temp_buf, "%s%s:%d", port > 0 ? "tcp://":"unix://", host, port);
+					cok->pool_key = fnv1a_32(temp_buf, len);
 				}
 			}
 		}
@@ -341,11 +341,11 @@ static int _lua_co_close(lua_State *L, cosocket_t *cok){
 	}
 	
 	if(cok->fd > -1){
-		if(cok->pool_size < 1 || add_connect_to_pool(cok->pool_key, cok->pool_size, cok->fd) == 0){
+		if(cok->pool_size < 1 || add_connect_to_pool(epoll_fd, cok->pool_key, cok->pool_size, cok->fd) == 0){
+			struct epoll_event ev;
+			epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
 			close(cok->fd);
 		}
-		struct epoll_event ev;
-		epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
 		cok->fd = -1;
 	}
 
@@ -609,8 +609,16 @@ int coevent_epoll_job(struct epoll_event ev){
 	int n = 0, ret = 0;
 	io_counts += 1;
 	
+	if(cok->type == EPOLL_PTR_TYPE_COSOCKET_WAIT){
+		/// process the connection event in pool.
+		cosocket_connect_pool_t* cpd = ev.data.ptr;
+		del_connect_in_pool(epoll_fd, cpd);
+		return 0;
+	}
+	
 	if(cok->dns_query_fd > -1){ /// is dns query
-		unsigned char pkt[2048];
+		//unsigned char pkt[2048];
+		unsigned char *pkt = temp_buf;
 		int n;
 
 		while ((n = recvfrom(cok->dns_query_fd, pkt, sizeof(pkt), 0, NULL, NULL)) > 0 && n > sizeof(dns_query_header_t)){
@@ -808,8 +816,6 @@ init_read_buf:
 			}
 			if(cok->send_buf_ed == cok->send_buf_len || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)){
 				if(n < 0 && errno != EAGAIN && errno != EWOULDBLOCK){
-					ev.data.ptr = cok;
-					ev.events = EPOLLPRI;
 					if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev) == -1)
 						printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
 					close(cok->fd);
@@ -822,6 +828,7 @@ init_read_buf:
 					if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, cok->fd, &ev) == -1)
 						printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
 				}
+				
 				{
 					if(cok->send_buf_need_free){
 						free(cok->send_buf_need_free);

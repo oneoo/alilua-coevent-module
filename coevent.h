@@ -28,6 +28,10 @@
 #ifndef _COTEST_H
 	#define _COTEST_H
 	
+	#define EPOLL_PTR_TYPE_MAIN 1
+	#define EPOLL_PTR_TYPE_COSOCKET 2
+	#define EPOLL_PTR_TYPE_COSOCKET_WAIT 3
+	
 	#define large_malloc(s) (malloc(((int)(s/4096)+1)*4096))
 	#define A_C_R     "\x1b[31m"
 	#define A_C_G   "\x1b[32m"
@@ -70,15 +74,16 @@
 	} dns_cache_item_t;
 
 	typedef struct{
+		uint8_t type;
+		uint8_t recached;
+		int fd;
+		unsigned long pool_key;
 		void *next;
 		void *uper;
-		int fd;
-		int recached;
-		unsigned long pool_key;
 	} cosocket_connect_pool_t;
 
 	typedef struct {
-		int type;
+		uint8_t type;
 		int fd;
 		int status;
 		void *ptr;
