@@ -80,7 +80,7 @@
 		unsigned long pool_key;
 		void *next;
 		void *uper;
-	} cosocket_connect_pool_t;
+	} cosocket_connection_pool_t;
 
 	typedef struct {
 		uint8_t type;

@@ -341,7 +341,7 @@ static int _lua_co_close(lua_State *L, cosocket_t *cok){
 	}
 	
 	if(cok->fd > -1){
-		if(cok->pool_size < 1 || add_connect_to_pool(epoll_fd, cok->pool_key, cok->pool_size, cok->fd) == 0){
+		if(cok->pool_size < 1 || add_connection_to_pool(epoll_fd, cok->pool_key, cok->pool_size, cok->fd) == 0){
 			struct epoll_event ev;
 			epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
 			close(cok->fd);
@@ -611,8 +611,8 @@ int coevent_epoll_job(struct epoll_event ev){
 	
 	if(cok->type == EPOLL_PTR_TYPE_COSOCKET_WAIT){
 		/// process the connection event in pool.
-		cosocket_connect_pool_t* cpd = ev.data.ptr;
-		del_connect_in_pool(epoll_fd, cpd);
+		cosocket_connection_pool_t* cpd = ev.data.ptr;
+		del_connection_in_pool(epoll_fd, cpd);
 		return 0;
 	}
 	
@@ -926,7 +926,7 @@ void do_other_jobs(){
 	if(timer-chk_time > 0){
 		chk_time = timer;
 		chk_do_timeout_link(epoll_fd);
-		get_connect_in_pool(epoll_fd, 0);
+		get_connection_in_pool(epoll_fd, 0);
 	}
 	/// resume swops
 	{

@@ -33,10 +33,10 @@ uint32_t fnv1a_64(const char *data, uint32_t len) {
 
 void *connect_pool_p[2][64] = {{NULL32 NULL32},{NULL32 NULL32}};
 int connect_pool_ttl = 30;
-int get_connect_in_pool(int epoll_fd, unsigned long pool_key){
+int get_connection_in_pool(int epoll_fd, unsigned long pool_key){
 	//time(&timer);
 	int p = (timer/connect_pool_ttl)%2;
-	cosocket_connect_pool_t *n = NULL, *m = NULL, *nn = NULL;
+	cosocket_connection_pool_t *n = NULL, *m = NULL, *nn = NULL;
 	/// clear old caches
 	int q = (p+1)%2;
 	int i = 0;
@@ -77,7 +77,7 @@ int get_connect_in_pool(int epoll_fd, unsigned long pool_key){
 		if(n->pool_key == pool_key){
 			break;
 		}
-		n = (cosocket_connect_pool_t*)n->next;
+		n = (cosocket_connection_pool_t*)n->next;
 	}
 	
 	if(n){
@@ -88,9 +88,9 @@ int get_connect_in_pool(int epoll_fd, unsigned long pool_key){
 				connect_pool_p[p][k] = m;
 			}else connect_pool_p[p][k] = NULL;
 		}else{
-			((cosocket_connect_pool_t*)n->uper)->next = n->next;
+			((cosocket_connection_pool_t*)n->uper)->next = n->next;
 			if(n->next)
-				((cosocket_connect_pool_t*)n->next)->uper = n->uper;
+				((cosocket_connection_pool_t*)n->next)->uper = n->uper;
 		}
 		
 		int fd = n->fd;
@@ -102,22 +102,22 @@ int get_connect_in_pool(int epoll_fd, unsigned long pool_key){
 	return -1;
 }
 
-void del_connect_in_pool(int epoll_fd, cosocket_connect_pool_t* n){
+void del_connection_in_pool(int epoll_fd, cosocket_connection_pool_t* n){
 	int k = n->pool_key%64;
 	if(n == connect_pool_p[0][k]){
 		connect_pool_p[0][k] = n->next;
 		if(n->next){
-			((cosocket_connect_pool_t*)n->next)->uper = NULL;
+			((cosocket_connection_pool_t*)n->next)->uper = NULL;
 		}
 	}else if(n == connect_pool_p[1][k]){
 		connect_pool_p[1][k] = n->next;
 		if(n->next){
-			((cosocket_connect_pool_t*)n->next)->uper = NULL;
+			((cosocket_connection_pool_t*)n->next)->uper = NULL;
 		}
 	}else{
-		((cosocket_connect_pool_t*)n->uper)->next = n->next;
+		((cosocket_connection_pool_t*)n->uper)->next = n->next;
 		if(n->next)
-			((cosocket_connect_pool_t*)n->next)->uper = n->uper;
+			((cosocket_connection_pool_t*)n->next)->uper = n->uper;
 	}
 	
 	struct epoll_event ev;
@@ -126,20 +126,20 @@ void del_connect_in_pool(int epoll_fd, cosocket_connect_pool_t* n){
 	free(n);
 }
 
-int add_connect_to_pool(int epoll_fd, unsigned long pool_key, int pool_size, int fd){
+int add_connection_to_pool(int epoll_fd, unsigned long pool_key, int pool_size, int fd){
 	if(pool_key < 0)return -1;
 	time(&timer);
 	int p = (timer/connect_pool_ttl)%2;
 	struct epoll_event ev;
 	
-	cosocket_connect_pool_t *n = NULL, *m = NULL;
+	cosocket_connection_pool_t *n = NULL, *m = NULL;
 	
 	int k = pool_key%64;
 	
 	n = connect_pool_p[p][k];
 	
 	if(n == NULL){
-		m = malloc(sizeof(cosocket_connect_pool_t));
+		m = malloc(sizeof(cosocket_connection_pool_t));
 		if(m == NULL)
 			return 0;
 		m->type = EPOLL_PTR_TYPE_COSOCKET_WAIT;
@@ -166,7 +166,7 @@ int add_connect_to_pool(int epoll_fd, unsigned long pool_key, int pool_size, int
 			}
 
 			if(n->next == NULL){ /// last
-				m = malloc(sizeof(cosocket_connect_pool_t));
+				m = malloc(sizeof(cosocket_connection_pool_t));
 				if(m == NULL)
 					return 0;
 				m->type = EPOLL_PTR_TYPE_COSOCKET_WAIT;
@@ -185,7 +185,7 @@ int add_connect_to_pool(int epoll_fd, unsigned long pool_key, int pool_size, int
 		
 				return 1;
 			}
-			n = (cosocket_connect_pool_t*)n->next;
+			n = (cosocket_connection_pool_t*)n->next;
 		}
 	}
 }
@@ -473,7 +473,7 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 
 	if(found > 0){
 		cok->addr.sin_addr= ips[cok->dns_query_fd%found];
-		int sockfd = get_connect_in_pool(epoll_fd, cok->pool_key);
+		int sockfd = get_connection_in_pool(epoll_fd, cok->pool_key);
 		if(sockfd != -1){
 			cok->fd = sockfd;
 			cok->status = 2;
@@ -593,7 +593,7 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 			}
 		}
 	}
-	sockfd = get_connect_in_pool(epoll_fd, cok->pool_key);
+	sockfd = get_connection_in_pool(epoll_fd, cok->pool_key);
 	if(sockfd == -1){
 		if((sockfd = socket(port > 0 ? AF_INET:AF_UNIX, SOCK_STREAM, 0)) < 0){
 			return -1;
