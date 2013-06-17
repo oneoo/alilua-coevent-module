@@ -110,7 +110,10 @@ static int lua_co_connect(lua_State *L){
 
 static int lua_co_send(lua_State *L){
 	{
-		if(!lua_isuserdata(L, 1) || (!lua_isstring(L, 2) && !lua_istable(L, 2))){
+		if(lua_gettop(L) < 2)
+			return 0;
+		int t = lua_type(L, 2);
+		if(!lua_isuserdata(L, 1) || (t != LUA_TSTRING && t != LUA_TTABLE)){
 			lua_pushboolean(L, 0);
 			lua_pushstring(L, "Error params!");
 			return 2;
@@ -125,7 +128,7 @@ static int lua_co_send(lua_State *L){
 		cok->L = L;
 
 		cok->send_buf_ed = 0;
-		if(lua_istable(L, 2)){
+		if(t == LUA_TTABLE){
 			cok->send_buf_len = lua_calc_strlen_in_table(L, 2, 2, 1 /* strict */);
 			if(cok->send_buf_len > 0){
 				if(cok->send_buf_len <= sizeof(cok->_send_buf)){
@@ -615,13 +618,12 @@ int coevent_epoll_job(struct epoll_event ev){
 		del_connection_in_pool(epoll_fd, cpd);
 		return 0;
 	}
-	
+
 	if(cok->dns_query_fd > -1){ /// is dns query
 		//unsigned char pkt[2048];
 		unsigned char *pkt = temp_buf;
-		int n;
 
-		while ((n = recvfrom(cok->dns_query_fd, pkt, sizeof(pkt), 0, NULL, NULL)) > 0 && n > sizeof(dns_query_header_t)){
+		while ((n = recvfrom(cok->dns_query_fd, pkt, 2048, 0, NULL, NULL)) > 0 && n >= sizeof(dns_query_header_t)){
 			parse_dns_result(epoll_fd, cok->dns_query_fd, cok, pkt, n);
 			break;
 		}
@@ -1030,7 +1032,7 @@ function clearthreads() \
 	end \
 	collectgarbage() \
 end \
-function newthread(f,n1,n2,n3,n4,n5) local F = _cocreate(function(n1,n2,n3,n4,n5) local R = {f(n1,n2,n3,n4,n5)} local t = coroutine_resume_waiting(unpack(R)) if t then allthreads[t] = R end return unpack(R) end) _coresume(F,n1,n2,n3,n4,n5) allthreads[F]=1 return F end");
+function newthread(f,n1,n2,n3,n4,n5) local F = _cocreate(function(n1,n2,n3,n4,n5) local R = {f(n1,n2,n3,n4,n5)} local t = coroutine_resume_waiting(unpack(R)) if t then allthreads[t] = R end return unpack(R) end) local r,e = _coresume(F,n1,n2,n3,n4,n5) if e then return nil,e end allthreads[F]=1 return F end");
 
 	lua_pcall(L,0,0,0);
 	

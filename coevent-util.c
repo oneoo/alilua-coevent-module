@@ -283,11 +283,10 @@ char pkt[2048];
 int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 	if(dns_server_count == 0){
 		int p1 = 0, p2 = 0, p3 = 0, p4 = 0, i = 0;
-		for(i = 0; i< 4; i++){
+		for(i=0;i<4;i++){
 			dns_servers[i].sin_family = AF_INET;
 			dns_servers[i].sin_port = htons(53);
 		}
-		
 		FILE *fp;
 		char line[200] , *p;
 		if((fp = fopen("/etc/resolv.conf" , "r")) == NULL)
@@ -316,11 +315,12 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 			fclose(fp);
 		}
 		if(dns_server_count < 2){
-			dns_servers[dns_server_count].sin_addr.s_addr = htonl(((8 << 24) | (8 << 16) | (8 << 8) | (8)));dns_server_count++;
+			dns_servers[dns_server_count].sin_addr.s_addr = inet_addr("8.8.8.8");
+			dns_server_count++;
 		}
 
 		if(dns_server_count < 2){
-			dns_servers[dns_server_count].sin_addr.s_addr = htonl(((208 << 24) | (67 << 16) | (222 << 8) | (222)));
+			dns_servers[dns_server_count].sin_addr.s_addr = inet_addr("208.67.22.222");
 			dns_server_count++;
 		}
 	}
@@ -337,7 +337,12 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 	if(nlen < 60){
 		memcpy(cok->dns_query_name, name, nlen);
 		cok->dns_query_name[nlen] = '\0';
+	}else{
+		cok->dns_query_name[0] = '-';
+		cok->dns_query_name[1] = '\0';
+		nlen = 1;
 	}
+	name = cok->dns_query_name;
 	
 	int opt = 1;
 	ioctl(cok->dns_query_fd, FIONBIO, &opt);
@@ -347,7 +352,7 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 	ev.data.ptr = cok;
 	epoll_ctl(epoll_fd, EPOLL_CTL_ADD, cok->dns_query_fd, &ev);
 	
-	int	i, n, name_len, m;
+	int	i, n, m;
 	dns_query_header_t *header = NULL;
 
 	const char *s;
@@ -362,12 +367,11 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 	header->nother	 = 0;
 
 	// Encode DNS name 
-	name_len = strlen(name);
 	p = (char *) &header->data;	/* For encoding host name into packet */
 
 	do{
 		if ((s = strchr(name, '.')) == NULL)
-			s = name + name_len;
+			s = name + nlen;
 
 		n = s - name;			/* Chunk length */
 		*p++ = n;				/* Copy length */
@@ -378,7 +382,7 @@ int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name){
 			n++;
 
 		name += n;
-		name_len -= n;
+		nlen -= n;
 
 	} while (*s != '\0');
 
@@ -824,8 +828,8 @@ size_t lua_calc_strlen_in_table(lua_State *L, int index, int arg_i, unsigned str
 		/* not an array (non positive integer key) */
 		lua_pop(L, 2); /* stack: table */
 
-		msg = lua_pushfstring(L, "non-array table found");
-		luaL_argerror(L, arg_i, msg);
+		//msg = lua_pushfstring(L, "non-array table found"); /// commented by oneoo
+		//luaL_argerror(L, arg_i, msg);
 		return 0;
 	}
 
