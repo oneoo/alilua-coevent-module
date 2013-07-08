@@ -52,7 +52,6 @@
 
 	typedef struct{
 		lua_State *L;
-		//int ref;
 		void *next;
 		char z[12]; /// size align
 	} cosocket_swop_t;
@@ -70,9 +69,23 @@
 		uint32_t	key2;
 		struct in_addr addr;
 		int		recached;
-		void *		next;
+		void*		next;
 	} dns_cache_item_t;
 
+	typedef struct{
+		long	 count;
+		unsigned long pool_key;
+		void*	next;
+		void*	uper;
+	} cosocket_connection_pool_counter_t;
+	
+	typedef struct{
+		void* cok;
+		void* next;
+		void* uper;
+		void* z2;
+	} cosocket_waiting_get_connection_t;
+	
 	typedef struct{
 		uint8_t type;
 		uint8_t recached;
@@ -111,7 +124,7 @@
 		unsigned long pool_key;
 		int reusedtimes;
 		
-		int ref;
+		int inuse;
 	} cosocket_t;
 
 	typedef struct{
@@ -140,6 +153,9 @@
 	void add_dns_cache(const char *name, struct in_addr addr, int do_recache);
 	int do_dns_query(int epoll_fd, cosocket_t *cok, const char *name);
 	void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char *pkt, int len);
+	cosocket_connection_pool_counter_t* get_connection_pool_counter(unsigned long pool_key);
+	void connection_pool_counter_operate(unsigned long pool_key, int a);
+	int add_waiting_get_connection(cosocket_t* cok);
 	long longtime();
 	int lua_f_time(lua_State *L);
 	int lua_f_longtime(lua_State *L);

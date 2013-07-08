@@ -12,9 +12,9 @@ function test_mysql()
 	local db_ok, err, errno, sqlstate = db:connect({
 					host = "localhost",
 					port = 3306,
-					database = "yo2.com",
-					user = "root",
-					password = "uuu123"})
+					database = "d1",
+					user = "u1",
+					password = "u11111"})
 	print('start test_mysql')
 	local st = longtime()
 
@@ -29,7 +29,7 @@ function test_mysql()
 	local tt = newthread(test_http_client, 300, 'www.163.com', '/rss/')
 print('used:'..((longtime()-st)/1000))
 	for n=1,1 do
-		local bytes, err = db:send_query("select * from users;")
+		local bytes, err = db:send_query("select * from t1;")
 		if not bytes then
 			print("failed to send query: ", err)
 		end
@@ -44,6 +44,49 @@ print('used:'..((longtime()-st)/1000))
 	end
 	
 	
+	local res, err, errno, sqlstate =
+		db:query("drop table if exists cats")
+	if not res then
+		print("bad result: ", err, ": ", errno, ": ", sqlstate, ".")
+	end
+			
+	print(db:query('CREATE TABLE cats'
+					.. "(id serial primary key, "
+					.. "name varchar(5) NULL)"))
+	if not res then
+		print("bad result: ", err, ": ", errno, ": ", sqlstate, ".")
+	end
+
+	print("table cats created.")
+
+	local res, err, errno, sqlstate =
+		db:query("INSERT INTO cats ?", {
+										{id=null, name='Bob'},
+										{id=null, name=''},
+										{id=null, name=null}
+										}
+				)
+	 if not res then
+		print("bad result: ", err, ": ", errno, ": ", sqlstate, ".")
+	end
+	
+	res, err = db:get_results("SELECT * FROM cats")
+	print(cjson.encode(res))
+	
+	res, err = db:get_results("SELECT * FROM cats WHERE ?", {id=123})
+	print('rt', cjson.encode(res))
+	
+	res, err = db:query("DELETE FROM cats WHERE id=? AND name=?", 123, 'a')
+	print(res, err) -- res == false
+	
+	res, err = db:query("DELETE FROM cats WHERE ?", {id=3, name=null})
+	print(res, err) -- res == table , and res.affected_rows == 1
+	
+	db:query("INSERT INTO cats SET ?", {id=null, name='aa"bb'})
+	db:query("INSERT INTO cats SET ?", {id=null, name="aa'bb"})
+	
+	res, err = db:get_results("SELECT * FROM cats")
+	print('rt', cjson.encode(res))
 	
 	print('test_mysql be end  used:'..((longtime()-st)/1000));
 	coroutine_wait(t)
@@ -199,9 +242,11 @@ local af = function()
 	coroutine_wait(t2)
 	coroutine_wait(t3)
 	
+	rts,e = wait({ts[1], ts[2], 'aaa'})
+
 	for i=1,1000 do
-		if not ts[i] then break end
-		print(i+100, coroutine_wait(ts[i]))
+		if not rts[i] then break end
+		print(i+100, rts[i])
 	end
 	
 	print('times:', (longtime()-t)/1000)

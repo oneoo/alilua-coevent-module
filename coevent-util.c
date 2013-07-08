@@ -31,6 +31,70 @@ uint32_t fnv1a_64(const char *data, uint32_t len) {
 	return (uint32_t)rv;
 }
 
+void *cosocket_connection_pool_counters[64] = {NULL32 NULL32};
+cosocket_connection_pool_counter_t* get_connection_pool_counter(unsigned long pool_key){
+	int k = pool_key%64;
+	cosocket_connection_pool_counter_t* n = cosocket_connection_pool_counters[k];
+	cosocket_connection_pool_counter_t* u = NULL;
+	while(n && n->pool_key != pool_key){
+		u = n;
+		n = n->next;
+	}
+	if(!n){
+		n = malloc(sizeof(cosocket_connection_pool_counter_t));
+		n->pool_key = pool_key;
+		n->count = 0;
+		n->next = NULL;
+		n->uper = NULL;
+		if(cosocket_connection_pool_counters[k] == NULL) // at head
+			cosocket_connection_pool_counters[k] = n;
+		else if(u){
+			n->uper = u;
+			u->next = n;
+		}
+	}
+	
+	return n;
+}
+
+void connection_pool_counter_operate(unsigned long pool_key, int a){
+	/// add: connection_pool_counter_operate(key, 1);
+	/// remove: connection_pool_counter_operate(key, -1);
+	if(pool_key > 0){
+		cosocket_connection_pool_counter_t* pool_counter = get_connection_pool_counter(pool_key);
+		pool_counter->count += a;
+		if(pool_counter->count < -1001){
+			pool_counter->count = 0;
+		}
+	}
+}
+
+void* waiting_get_connections[64] = {NULL32 NULL32};
+int add_waiting_get_connection(cosocket_t* cok){
+	if(cok->pool_key < 1)return 0;
+	cosocket_waiting_get_connection_t* n = malloc(sizeof(cosocket_waiting_get_connection_t));
+	if(!n)return 0;
+	n->cok = cok;
+	n->next = NULL;
+	n->uper = NULL;
+	
+	int k = cok->pool_key%64;
+	if(waiting_get_connections[k] == NULL){
+		waiting_get_connections[k] = n;
+		return 1;
+	}else{
+		cosocket_waiting_get_connection_t* m = waiting_get_connections[k];
+		while(m){
+			if(!m->next){
+				m->next = n;
+				n->uper = m;
+				return 1;
+			}
+			m = m->next;
+		}
+	}
+}
+
 void *connect_pool_p[2][64] = {{NULL32 NULL32},{NULL32 NULL32}};
 int connect_pool_ttl = 30;
 int get_connection_in_pool(int epoll_fd, unsigned long pool_key){
@@ -62,6 +126,7 @@ int get_connection_in_pool(int epoll_fd, unsigned long pool_key){
 			}else{
 				epoll_ctl(epoll_fd, EPOLL_CTL_DEL, m->fd, &ev);
 				close(m->fd);
+				connection_pool_counter_operate(m->pool_key, -1);
 				free(m);
 			}
 		}
@@ -72,6 +137,7 @@ int get_connection_in_pool(int epoll_fd, unsigned long pool_key){
 	if(pool_key == 0)return -1; /// only do clear job
 	int k = pool_key%64;
 	
+regetfd:
 	n = connect_pool_p[p][k];
 	while(n != NULL){
 		if(n->pool_key == pool_key){
@@ -99,6 +165,8 @@ int get_connection_in_pool(int epoll_fd, unsigned long pool_key){
 		return fd;
 	}
 	
+	if(p != q){p = q;goto regetfd;}
+	
 	return -1;
 }
 
@@ -123,18 +191,55 @@ void del_connection_in_pool(int epoll_fd, cosocket_connection_pool_t* n){
 	struct epoll_event ev;
 	epoll_ctl(epoll_fd, EPOLL_CTL_DEL, n->fd, &ev);
 	close(n->fd);
+	connection_pool_counter_operate(n->pool_key, -1);
 	free(n);
 }
 
 int add_connection_to_pool(int epoll_fd, unsigned long pool_key, int pool_size, int fd){
-	if(pool_key < 0)return -1;
+	if(pool_key < 0)return 0;
+	int k = pool_key%64;
+	/// check waiting list
+	{
+		cosocket_waiting_get_connection_t* m = waiting_get_connections[k];
+		int i=0;
+		if(m != NULL){
+			while(m && ((cosocket_t*)m->cok)->pool_key != pool_key){
+				m = m->next;
+			}
+			if(m){
+				if(m->uper){
+					((cosocket_waiting_get_connection_t*)m->uper)->next = m->next;
+					if(m->next)
+						((cosocket_waiting_get_connection_t*)m->next)->uper = m->uper;
+				}else{
+					waiting_get_connections[k] = m->next;
+					if(m->next)
+						((cosocket_waiting_get_connection_t*)m->next)->uper = NULL;
+				}
+				cosocket_t* _cok = m->cok;
+				free(m);
+				_cok->fd = fd;
+				_cok->status = 2;
+				_cok->reusedtimes = 1;
+
+				_cok->inuse = 0;
+				lua_pushboolean(_cok->L, 1);
+				if(lua_resume(_cok->L, 1) == LUA_ERRRUN){
+					if (lua_isstring(_cok->L, -1)){
+						printf("%s:%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(_cok->L, -1));
+						lua_pop(_cok->L, -1);
+					}
+				}
+				return 1;
+			}
+		}
+	}
+	/// end
 	time(&timer);
 	int p = (timer/connect_pool_ttl)%2;
 	struct epoll_event ev;
 	
 	cosocket_connection_pool_t *n = NULL, *m = NULL;
-	
-	int k = pool_key%64;
 	
 	n = connect_pool_p[p][k];
 	
@@ -188,6 +293,8 @@ int add_connection_to_pool(int epoll_fd, unsigned long pool_key, int pool_size, 
 			n = (cosocket_connection_pool_t*)n->next;
 		}
 	}
+	
+	return 0;
 }
 
 void *dns_cache[3][64] = {{NULL32 NULL32},{NULL32 NULL32},{NULL32 NULL32}};
@@ -477,12 +584,15 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 
 	if(found > 0){
 		cok->addr.sin_addr= ips[cok->dns_query_fd%found];
-		int sockfd = get_connection_in_pool(epoll_fd, cok->pool_key);
+		int sockfd = -1;
+		if(cok->pool_size > 0)
+			sockfd = get_connection_in_pool(epoll_fd, cok->pool_key);
 		if(sockfd != -1){
 			cok->fd = sockfd;
 			cok->status = 2;
 
 			lua_pushboolean(cok->L, 1);
+			cok->inuse = 0;
 			int ret = lua_resume(cok->L, 1);
 			if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 				printf("%s,%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(cok->L, -1));
@@ -495,6 +605,7 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 		if((sockfd=socket(AF_INET,SOCK_STREAM,0))<0){
 			lua_pushnil(cok->L);
 			lua_pushstring(cok->L, "Init socket error!");
+			cok->inuse = 0;
 			int ret = lua_resume(cok->L, 2);
 			if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 				printf("%s:%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(cok->L, -1));
@@ -502,11 +613,13 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 			}
 			return;
 		}
+		connection_pool_counter_operate(cok->pool_key, 1);
 		cok->fd = sockfd;
 		if(!coevent_setnonblocking(cok->fd)){
 			close(cok->fd);
 			lua_pushnil(cok->L);
 			lua_pushstring(cok->L, "Init socket error!");
+			cok->inuse = 0;
 			int ret = lua_resume(cok->L, 2);
 			if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 				printf("%s:%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(cok->L, -1));
@@ -526,6 +639,7 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 		if(ret == 0){
 			///////// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! connected /////
 			lua_pushboolean(cok->L, 1);
+			cok->inuse = 0;
 			int ret = lua_resume(cok->L, 1);
 			if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 				printf("%s:%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(cok->L, -1));
@@ -539,10 +653,12 @@ void parse_dns_result(int epoll_fd, int fd, cosocket_t *cok, const unsigned char
 	{
 		epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
 		close(cok->fd);
+		connection_pool_counter_operate(cok->pool_key, -1);
 		cok->fd = -1;
 		cok->status = 0;
 		lua_pushnil(cok->L);
 		lua_pushstring(cok->L, "names lookup error!");
+		cok->inuse = 0;
 		int ret = lua_resume(cok->L, 2);
 		if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 			printf("%s:%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(cok->L, -1));
@@ -597,7 +713,8 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 			}
 		}
 	}
-	sockfd = get_connection_in_pool(epoll_fd, cok->pool_key);
+	if(cok->pool_size > 0)
+		sockfd = get_connection_in_pool(epoll_fd, cok->pool_key);
 	if(sockfd == -1){
 		if((sockfd = socket(port > 0 ? AF_INET:AF_UNIX, SOCK_STREAM, 0)) < 0){
 			return -1;
@@ -606,6 +723,7 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int epoll_fd, int *
 			close(sockfd);
 			return -1;
 		}
+		connection_pool_counter_operate(cok->pool_key, 1);
 		cok->reusedtimes = 0;
 	}else{
 		cok->reusedtimes = 1;
@@ -749,12 +867,14 @@ int chk_do_timeout_link(int epoll_fd){
 				{
 					epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
 					close(cok->fd);
+					connection_pool_counter_operate(cok->pool_key, -1);
 					cok->fd = -1;
 					cok->status = 0;
 				}
 				
 				lua_pushnil(cok->L);
 				lua_pushstring(cok->L, "timeout!");
+				cok->inuse = 0;
 				int ret = lua_resume(cok->L, 2);
 				if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 					//printf("%s:%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(cok->L, -1));

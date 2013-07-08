@@ -1,6 +1,9 @@
+-- Copyright (C) 2012 Yichun Zhang (agentzh)
+
+
 local bit = require "bit"
 local sub = string.sub
-local tcp = cosocket.tcp
+local tcp --= ngx.socket.tcp
 local insert = table.insert
 local strlen = string.len
 local strbyte = string.byte
@@ -14,16 +17,50 @@ local bor = bit.bor
 local lshift = bit.lshift
 local rshift = bit.rshift
 local tohex = bit.tohex
-local sha1 = sha1bin
+local sha1 --= ngx.sha1_bin
 local concat = table.concat
 local unpack = unpack
 local setmetatable = setmetatable
 local error = error
+local tonumber = tonumber
+local print = print
+
+-- add by oneoo
+local ngx = ngx
+local sha1bin = sha1bin
 local type = type
+local pairs = pairs
 local ipairs = ipairs
 local tonumber = tonumber
 local tostring = tostring
-local print = print
+local _mysql_quote = escape
+if not _mysql_quote and ngx then
+    _mysql_quote = function(_)
+        _ = string.gsub(_, "\\", "\\\\")
+        _ = string.gsub(_, "\"", "\\\"")
+        _ = string.gsub(_, "\n", "\\n")
+        _ = string.gsub(_, "\r", "\\r")
+        _ = string.gsub(_, "\t", "\\t")
+        return _
+    end
+end
+if not _mysql_quote then _mysql_quote = function(s) return s end end
+function quote_sql_var(s)
+    if type(s) == 'string' then
+        return _mysql_quote(s)
+    end
+    return s
+end
+if ngx then
+    tcp = ngx.socket.tcp
+    null = ngx.null
+    sha1 = ngx.sha1_bin
+else
+    tcp = cosocket.tcp
+    sha1 = sha1bin
+    if not null then null = false end
+end
+-- end
 
 module(...)
 
@@ -57,6 +94,7 @@ end
 converters[0x09] = tonumber  -- int24
 converters[0x0d] = tonumber  -- year
 converters[0xf6] = tonumber  -- newdecimal
+
 
 local function _get_byte2(data, i)
     local a, b = strbyte(data, i, i + 1)
@@ -175,16 +213,9 @@ function _send_packet(self, req, size)
         req
     }
 
-    --print("sending packet...",size, req)
-	--print(packet)
-	local r = sock:send(packet) -- oneoo modif
-	if r == nil and self.opts then
-		local o = connect(self, self.opts)
-		if o then
-			r = sock:send(packet)
-		end
-	end
-    return r
+    --print("sending packet...")
+
+    return sock:send(packet)
 end
 
 
@@ -471,7 +502,6 @@ end
 
 
 function connect(self, opts)
-    self.opts = opts -- oneoo add
     local sock = self.sock
     if not sock then
         return nil, "not initialized"
@@ -498,8 +528,11 @@ function connect(self, opts)
         if not pool then
             pool = concat({user, database, host, port}, ":")
         end
-        ok, err = sock:connect(host, port, opts.pool_size, user..'@'..host..':'..port..'/'..database)
-        --ok, err = sock:connect(host, port, { pool = pool })
+        if ngx then
+            ok, err = sock:connect(host, port, { pool = pool })
+        else
+            ok, err = sock:connect(host, port, opts.pool_size, user..'@'..host..':'..port..'/'..database)
+        end
 
     else
         local path = opts.path
@@ -511,7 +544,11 @@ function connect(self, opts)
             pool = concat({user, database, path}, ":")
         end
 
-        ok, err = sock:connect(path, opts.pool_size, user..'@'..path..'/'..database)
+        if ngx then
+            ok, err = sock:connect("unix:" .. path, { pool = pool })
+        else
+            ok, err = sock:connect(path, opts.pool_size, user..'@'..path..'/'..database)
+        end
     end
 
     if not ok then
@@ -522,15 +559,6 @@ function connect(self, opts)
 
     if reused and reused > 0 then
         self.state = STATE_CONNECTED
-		--[[
-		-- switch database , but not support switch user ...!!!
-		local bytes, err = send_query(self, "USE "..database)
-		if not bytes then
-			print("failed to send query: ", err)
-		else
-			read_result(self)
-		end
-		]]
         return 1
     end
 
@@ -627,12 +655,12 @@ function connect(self, opts)
     local packet_len = 4 + 4 + 1 + 23 + strlen(user) + 1
         + strlen(token) + 1 + strlen(database) + 1
 
-     --print("packet content length: ", packet_len)
-     --print("packet content: ", _dump(concat(req, "")))
+    -- print("packet content length: ", packet_len)
+    -- print("packet content: ", _dump(concat(req, "")))
 
     local bytes, err = _send_packet(self, req, packet_len)
     if not bytes then
-        return nil, "failed to send client authentication packet: " .. err
+        return nil, "failed to send client authentication packet: " .. (err and err or 'unknow')
     end
 
     --print("packet sent ", bytes, " bytes")
@@ -661,18 +689,18 @@ function connect(self, opts)
 end
 
 
-function setkeepalive(self, ...)
+function set_keepalive(self, ...)
     local sock = self.sock
     if not sock then
         return nil, "not initialized"
     end
 
-    --[[if self.state ~= STATE_CONNECTED then
+    if self.state ~= STATE_CONNECTED then
         return nil, "cannot be reused in the current connection state: "
                     .. (self.state or "nil")
     end
 
-    self.state = nil]]
+    self.state = nil
     return sock:setkeepalive(...)
 end
 
@@ -709,6 +737,8 @@ local function send_query(self, query)
         return nil, "cannot send query in the current context: "
                     .. (self.state or "nil")
     end
+    
+    --print(query)
 
     local sock = self.sock
     if not sock then
@@ -727,6 +757,10 @@ local function send_query(self, query)
 
     self.state = STATE_COMMAND_SENT
 
+    -- add by oneoo
+    self.command = query:sub(1,query:find(' ')-1):upper()
+    -- end
+    
     --print("packet sent ", bytes, " bytes")
 
     return bytes
@@ -760,6 +794,15 @@ local function read_result(self)
         if res and band(res.server_status, SERVER_MORE_RESULTS_EXISTS) ~= 0 then
             return res, "again"
         end
+
+        -- add by oneoo
+        if self.command == 'INSERT' or self.command == 'DELETE' or self.command == 'UPDATE' then
+            if res.affected_rows < 1 then
+                self.state = STATE_CONNECTED
+                return false, 'no affected'
+            end
+        end
+        -- end
 
         self.state = STATE_CONNECTED
         return res
@@ -839,9 +882,226 @@ local function read_result(self)
     return rows
 end
 
+-- add by oneoo
+function parse_sql(...)
+    local args = {...}
+    local sql = args[1]
+    if not sql or type(sql) ~= 'string' then
+        return nil, 'no SQL'
+    end
 
-function query(self, query)
-    local bytes, err = send_query(self, query)
+    if #args > 1 then
+        local is_normal_mode = true
+        --('SELECT * FROM table WHERE id=? AND name=? LIMIT 1', 1, 'one')
+        local k,v
+        for k,v in pairs(args) do
+            if type(v) == 'table' then
+                is_normal_mode = false
+                break
+            end
+        end
+        
+        if not is_normal_mode and 
+            type(args[2]) == 'table' and 
+            #args[2] > 0 and 
+            type(args[2][1]) ~= 'table' then
+            --('SELECT * FROM table WHERE id=? AND name=? LIMIT 1', {1, 'one'})
+            args = {args[1], unpack(args[2])}
+            is_normal_mode = true
+        end
+        
+        if is_normal_mode then
+            local i = 2
+            local _pos = 1
+            local w = sql:upper():find(' WHERE ')
+            local iw = 20000
+            if w then
+                iw = 1
+                local _sql = sql:sub(1, w)
+                local p = _sql:find('?')
+                while p do
+                    iw = iw + 1
+                    p = _sql:find('?', p+1)
+                end
+            end
+            local p = sql:find('?', _pos)
+            while p do
+                if i>#args or args[i] == nil then
+                    return nil, 'miss data to parse marker'
+                end
+                v = args[i]
+                if v == null then
+                    v = ((w and i>iw) and 'IS ' or '')..'NULL'
+                end
+                sql = concat({
+                                    sql:sub(1, p-1),
+                                    (type(args[i])=='string' and '"' or ''),
+                                    _mysql_quote(v),
+                                    (type(args[i])=='string' and '"' or ''),
+                                    sql:sub(p+1)
+                                    })
+                i = i+1
+                _pos = p+#tostring(args[i])
+                p = sql:find('?', _pos)
+            end
+            
+            return sql
+        end
+        
+        local i = sql:find(' ')
+        if not i then
+            return nil, 'error SQL format'
+        end
+        local starts = sql:sub(1, i-1):upper()
+        i = sql:find('?')
+        if not i then
+            return nil, 'miss ? marker in the SQL'
+        end
+        
+        local t2 = type(args[2])
+        
+        if t2 == 'string' then
+            sql = sql:sub(1, i-1).. '"'.. args[2] .. '"' .. sql:sub(i+1)
+        elseif t2 == 'number' then
+            sql = sql:sub(1, i-1).. args[2] .. sql:sub(i+1)
+        elseif t2 == 'table' then
+            local sql_p = ''
+            local sep = ' AND '
+            if starts == 'UPDATE' or starts == 'INSERT' then
+                sql_p = ''
+                sep = ', '
+            end
+            if #args[2] < 1 then
+                for k,v in pairs(args[2]) do
+                    if type(k) == 'string' then
+                        if v == null then
+                            sql_p = concat({
+                                                sql_p,
+                                                '`', k, '`',
+                                                ((starts=='INSERT' or starts=='UPDATE') and '=' or ' IS '),
+                                                'NULL', sep
+                                                })
+                        else
+                            local q = (type(v) == 'string' and '"' or '')
+                            sql_p = concat({
+                                                sql_p,
+                                                '`', k, '`=',
+                                                q, _mysql_quote(v), q,
+                                                sep
+                                                })
+                        end
+                    end
+                end
+                sql_p = sql_p:sub(1,#sql_p-#sep)
+            else
+                if starts == 'INSERT' and type(args[2][1]) == 'table' and #args[2][1] < 1 then
+                sql_p = sql_p .. '('
+                for k,v in pairs(args[2][1]) do
+                    if type(k) == 'string' then
+                        sql_p = sql_p ..'`' .. k .. '`' .. sep
+                    end
+                end
+                sql_p = sql_p:sub(1,#sql_p-#sep)
+                sql_p = sql_p .. ')'
+                sql_p = sql_p .. ' VALUES '
+                local k
+                for k=1,#args[2] do
+                    sql_p = sql_p .. '('
+                    for k,v in pairs(args[2][k]) do
+                        if type(k) == 'string' then
+                            if v == null then
+                                sql_p = sql_p .. 'NULL' .. sep
+                            else
+                                local q = (type(v) == 'string' and '"' or '')
+                                sql_p = concat({
+                                                    sql_p,
+                                                    q, _mysql_quote(v), q,
+                                                    sep
+                                                    })
+                            end
+                        end
+                    end
+                    sql_p = sql_p:sub(1,#sql_p-#sep)
+                    sql_p = sql_p .. ')'.. sep
+                end
+                sql_p = sql_p:sub(1,#sql_p-#sep)
+                end
+            end
+            
+            sql = sql:sub(1, i-1) .. sql_p .. sql:sub(i+1)
+            local oi = i
+            i = sql:find('?', i+#sql_p)
+            if i then
+                if #args < 3 or type(args[3]) ~= 'table' or #args[3] > 0 then
+                    return nil, 'miss data to parse marker near:'
+                                .. sql:sub(1, oi-1)..'?'..sql:sub(#sql_p+oi,i-1)..'<?>'
+                end
+                
+                sql_p = ''
+                local sep = ' AND '
+                for k,v in pairs(args[3]) do
+                    if type(k) == 'string' then
+                        if v == null then
+                            sql_p = sql_p .. '`' .. k .. '` IS NULL' .. sep
+                        else
+                            local q = (type(v) == 'string' and '"' or '')
+                            sql_p = concat({
+                                                sql_p,
+                                                '`', k, '`=',
+                                                q, _mysql_quote(v), q,
+                                                sep
+                                                })
+                        end
+                    end
+                end
+                sql_p = sql_p:sub(1,#sql_p-#sep)
+                
+                sql = sql:sub(1, i-1) .. sql_p .. sql:sub(i+1)
+            end
+        end
+    end
+
+    return sql
+end
+
+function get_row(self, query)
+    local sql = parse_sql(query)
+    local _sql = sql:upper()
+    
+    if not _sql:find(' LIMIT ') then
+        local i = sql:find(';')
+        if not i then i = #sql else i = i-1 end
+        sql = sql:sub(1,i)..' LIMIT 1'..sql:sub(i+1)
+    end
+    
+    local bytes, err = send_query(self, sql)
+    if not bytes then
+        return nil, "failed to send query: " .. err
+    end
+
+    local r, err = read_result(self)
+    if r and #r < 1 then r = nil end
+    return r, err
+end
+
+function get_results(self, query)
+    local sql = parse_sql(query)
+    local _sql = sql:upper()
+    
+    local bytes, err = send_query(self, sql)
+    if not bytes then
+        return nil, "failed to send query: " .. err
+    end
+
+    local r, err = read_result(self)
+    if r and #r < 1 then r = nil end
+    return r, err
+end
+-- end
+
+function query(self, query, ...)
+    local args = {query, ...}
+    local bytes, err = send_query(self, parse_sql(unpack(args)))
     if not bytes then
         return nil, "failed to send query: " .. err
     end

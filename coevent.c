@@ -6,16 +6,23 @@ int clearthreads_handler = 0;
 unsigned char temp_buf[4096];
 
 static int lua_co_connect(lua_State *L){
+	cosocket_t *cok = NULL;
 	{
 		if(!lua_isuserdata(L, 1) || !lua_isstring(L, 2)){
 			lua_pushnil(L);
 			lua_pushstring(L, "Error params!");
 			return 2;
 		}
-		cosocket_t *cok = (cosocket_t *)lua_touserdata(L, 1);
+		cok = (cosocket_t *)lua_touserdata(L, 1);
 		if(cok->status > 0){
 			lua_pushnil(L);
 			lua_pushstring(L, "Aleady connected!");
+			return 2;
+		}
+		
+		if(cok->inuse == 1){
+			lua_pushnil(L);
+			lua_pushstring(L, "socket busy!");
 			return 2;
 		}
 
@@ -53,19 +60,46 @@ static int lua_co_connect(lua_State *L){
 				if(lua_gettop(L) == pn && lua_isstring(L, pn)){
 					const char *key = lua_tolstring(L, pn, &len);
 					cok->pool_key = fnv1a_32(key, len);
-				}else{ /// create a normal key
-					len = sprintf(temp_buf, "%s%s:%d", port > 0 ? "tcp://":"unix://", host, port);
-					cok->pool_key = fnv1a_32(temp_buf, len);
 				}
 			}
 		}
-
+		
+		if(cok->pool_key == 0){ /// create a normal key
+			int len = sprintf(temp_buf, "%s%s:%d", port > 0 ? "tcp://":"unix://", host, port);
+			cok->pool_key = fnv1a_32(temp_buf, len);
+		}
+		
 		cok->status = 1;
 		cok->L = L;
 		cok->read_buf = NULL;
 		cok->last_buf = NULL;
 		cok->total_buf_len = 0;
 		cok->buf_read_len = 0;
+		
+		/// check pool count
+		if(cok->pool_size > 0){
+			cosocket_connection_pool_counter_t* pool_counter = get_connection_pool_counter(cok->pool_key);
+			if(pool_counter->count >= cok->pool_size){
+				cok->fd = get_connection_in_pool(epoll_fd, cok->pool_key);
+				if(cok->fd != -1){
+					cok->status = 2;
+					cok->reusedtimes = 1;
+					struct epoll_event ev;
+					ev.data.ptr = cok;
+					ev.events = EPOLLOUT;
+					if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, cok->fd, &ev) == -1)
+						printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
+					lua_pushboolean(L, 1);
+					return 1;
+				}
+				/// pool full
+				if(add_waiting_get_connection(cok)){
+					cok->inuse = 1;
+					return lua_yield(L, 0);
+				}
+			}
+		}
+		
 		int connect_ret = 0;
 		cok->fd = tcp_connect(host, port, cok, epoll_fd, &connect_ret);
 		
@@ -104,11 +138,13 @@ static int lua_co_connect(lua_State *L){
 			return 2;
 		}
 	}
-
+	
+	cok->inuse = 1;
 	return lua_yield(L, 0);
 }
 
 static int lua_co_send(lua_State *L){
+	cosocket_t *cok = NULL;
 	{
 		if(lua_gettop(L) < 2)
 			return 0;
@@ -119,12 +155,19 @@ static int lua_co_send(lua_State *L){
 			return 2;
 		}
 		
-		cosocket_t *cok = (cosocket_t *)lua_touserdata(L, 1);
+		cok = (cosocket_t *)lua_touserdata(L, 1);
 		if(cok->status != 2 || cok->fd == -1){
 			lua_pushboolean(L, 0);
 			lua_pushstring(L, "Not connected!");
 			return 2;
 		}
+		
+		if(cok->inuse == 1){
+			lua_pushnil(L);
+			lua_pushstring(L, "socket busy!");
+			return 2;
+		}
+		
 		cok->L = L;
 
 		cok->send_buf_ed = 0;
@@ -165,6 +208,7 @@ static int lua_co_send(lua_State *L){
 		add_to_timeout_link(cok, cok->timeout);
 	}
 	
+	cok->inuse = 1;
 	return lua_yield(L, 0);
 }
 
@@ -260,6 +304,7 @@ int lua_co_read_(cosocket_t *cok){
 }
 
 static int lua_co_read(lua_State *L){
+	cosocket_t *cok = NULL;
 	{
 		if(!lua_isuserdata(L, 1)){
 			lua_pushnil(L);
@@ -267,12 +312,19 @@ static int lua_co_read(lua_State *L){
 			return 2;
 		}
 		
-		cosocket_t *cok = (cosocket_t *)lua_touserdata(L, 1);
+		cok = (cosocket_t *)lua_touserdata(L, 1);
 		if((cok->status != 2 || cok->fd == -1) && cok->total_buf_len < 1){
 			lua_pushnil(L);
 			lua_pushfstring(L, "Not connected! %d %d", cok->status, cok->fd);
 			return 2;
 		}
+		
+		if(cok->inuse == 1){
+			lua_pushnil(L);
+			lua_pushstring(L, "socket busy!");
+			return 2;
+		}
+		
 		cok->L = L;
 		
 		cok->buf_read_len = -2; /// read line
@@ -314,6 +366,7 @@ static int lua_co_read(lua_State *L){
 		add_to_timeout_link(cok, cok->timeout);
 	}
 	
+	cok->inuse = 1;
 	return lua_yield(L, 0);
 }
 
@@ -347,6 +400,7 @@ static int _lua_co_close(lua_State *L, cosocket_t *cok){
 		if(cok->pool_size < 1 || add_connection_to_pool(epoll_fd, cok->pool_key, cok->pool_size, cok->fd) == 0){
 			struct epoll_event ev;
 			epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
+			connection_pool_counter_operate(cok->pool_key, -1);
 			close(cok->fd);
 		}
 		cok->fd = -1;
@@ -366,6 +420,12 @@ static int lua_co_close(lua_State *L){
 	if(cok->status != 2){
 		lua_pushnil(L);
 		lua_pushstring(L, "Not connected!");
+		return 2;
+	}
+	
+	if(cok->inuse == 1){
+		lua_pushnil(L);
+		lua_pushstring(L, "socket busy!");
 		return 2;
 	}
 	
@@ -393,7 +453,7 @@ int lua_co_settimeout(lua_State *L){
 
 	cosocket_t *cok = (cosocket_t *)lua_touserdata(L, 1);
 	cok->timeout = lua_tonumber(L, 2);
-	
+
 	return 0;
 }
 
@@ -456,7 +516,7 @@ static int lua_co_tcp(lua_State *L){
 	cok = (cosocket_t*)lua_newuserdata(L, sizeof(cosocket_t));
 	cok->type = 2;
 	cok->L = L;
-	cok->ref = 0;
+	cok->inuse = 0;
 	cok->fd = -1;
 	cok->status = 0;
 	cok->read_buf = NULL;
@@ -580,7 +640,7 @@ int lua_f_coroutine_resume_waiting(lua_State *L){
 }
 
 int lua_f_coroutine_swop(lua_State *L){
-	if(swop_counter++ < 100){
+	if(swop_counter++ < 800){
 		lua_pushboolean(L, 0);
 		return 1;
 	}
@@ -615,6 +675,7 @@ int coevent_epoll_job(struct epoll_event ev){
 	if(cok->type == EPOLL_PTR_TYPE_COSOCKET_WAIT){
 		/// process the connection event in pool.
 		cosocket_connection_pool_t* cpd = ev.data.ptr;
+		connection_pool_counter_operate(cpd->pool_key, -1);
 		del_connection_in_pool(epoll_fd, cpd);
 		return 0;
 	}
@@ -676,6 +737,7 @@ init_read_buf:
 				cok->status = 0;
 				if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev) == -1)
 					printf("EPOLL_CTL_DEL error: %s:%d %s", __FILE__, __LINE__, strerror(errno));
+				connection_pool_counter_operate(cok->pool_key, -1);
 				close(cok->fd);
 				cok->fd = -1;
 				cok->status = 0;
@@ -683,6 +745,7 @@ init_read_buf:
 			if(cok->in_read_action == 1){
 				cok->in_read_action = 0;
 				int rt = lua_co_read_(cok);
+				cok->inuse = 0;
 				if(rt > 0){
 					ret = lua_resume(cok->L, rt);
 				}else if(n == 0){
@@ -694,6 +757,7 @@ init_read_buf:
 					//lua_pop(cok->L, -1);
 					{
 						epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
+						connection_pool_counter_operate(cok->pool_key, -1);
 						close(cok->fd);
 						cok->fd = -1;
 						cok->status = 0;
@@ -722,12 +786,14 @@ init_read_buf:
 					}*/
 					del_in_timeout_link(cok);
 
+					cok->inuse = 0;
 					ret = lua_resume(cok->L, rt);
 					if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 						printf("%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring(cok->L, -1));
 						//lua_pop(cok->L, -1);
 						{
 							epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
+							connection_pool_counter_operate(cok->pool_key, -1);
 							close(cok->fd);
 							cok->fd = -1;
 							cok->status = 0;
@@ -765,12 +831,14 @@ init_read_buf:
 				{
 					epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
 //printf("0x%x close fd %d   l:%d\n", cok->L, cok->fd, __LINE__);
+					connection_pool_counter_operate(cok->pool_key, -1);
 					close(cok->fd);
 					cok->fd = -1;
 					cok->status = 0;
 				}
 				lua_pushnil(cok->L);
 				lua_pushstring(cok->L, "Connect error!(2)");
+				cok->inuse = 0;
 				ret = lua_resume(cok->L, 2);
 				if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 					printf("%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring(cok->L, -1));
@@ -795,6 +863,7 @@ init_read_buf:
 						printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
 				}
 				lua_pushboolean(cok->L, 1);
+				cok->inuse = 0;
 				ret = lua_resume(cok->L, 1);
 				if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 					printf("%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring(cok->L, -1));
@@ -820,6 +889,7 @@ init_read_buf:
 				if(n < 0 && errno != EAGAIN && errno != EWOULDBLOCK){
 					if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev) == -1)
 						printf("EPOLL_CTL_MOD error: %d %s", __LINE__, strerror(errno));
+					connection_pool_counter_operate(cok->pool_key, -1);
 					close(cok->fd);
 					cok->fd = -1;
 					cok->status = 0;
@@ -850,6 +920,7 @@ init_read_buf:
 					lua_pushnil(cok->L);
 				else
 					lua_pushboolean(cok->L, 0);
+				cok->inuse = 0;
 				ret = lua_resume(cok->L, 1);
 				if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 					printf("%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring(cok->L, -1));
@@ -874,6 +945,7 @@ init_read_buf:
 		del_in_timeout_link(cok);
 		{
 			epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev);
+			connection_pool_counter_operate(cok->pool_key, -1);
 			close(cok->fd);
 			cok->fd = -1;
 			cok->status = 0;
@@ -881,6 +953,7 @@ init_read_buf:
 
 		lua_pushnil(cok->L);
 		lua_pushstring(cok->L, "Connect error!(1)");
+		cok->inuse = 0;
 		ret = lua_resume(cok->L, 2);
 		if (ret == LUA_ERRRUN && lua_isstring(cok->L, -1)) {
 			printf("%s:%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(cok->L, -1));
@@ -987,7 +1060,10 @@ int lua_f_startloop(lua_State *L){
 	lua_pushvalue(L, 1);  /* move function to top */
 	lua_xmove(L, job_L, 1);  /* move function from L to job_L */
 
-	lua_resume(job_L, 0);
+	if(lua_resume(job_L, 0) != LUA_YIELD && lua_isstring(job_L, -1)){
+		luaL_error(L, lua_tostring(job_L, -1));
+		lua_pop(job_L, -1);
+	}
 	
 	lua_getglobal(job_L, "clearthreads");
 	clearthreads_handler = luaL_ref(job_L, LUA_REGISTRYINDEX);
@@ -1005,6 +1081,7 @@ int luaopen_coevent(lua_State *L){
 	swop_top = malloc(sizeof(cosocket_swop_t));
 	swop_top->next = NULL;
 	
+	lua_pushlightuserdata(L, NULL);
 	lua_setglobal(L, "null");
 	lua_register(L, "startloop", lua_f_startloop);
 	lua_register(L, "coroutine_wait", lua_f_coroutine_wait);
@@ -1031,6 +1108,27 @@ function clearthreads() \
 		end \
 	end \
 	collectgarbage() \
+end \
+function wait(...) \
+	local arg = {...} \
+	local k,v = #arg \
+	if k == 1 then \
+		if type(arg[1]) == 'table' then \
+			local rts = {} \
+			for k,v in ipairs(arg[1]) do \
+				rts[k] = coroutine_wait(v) \
+			end \
+			return rts \
+		else \
+			return coroutine_wait(arg[1]) \
+		end \
+	elseif k > 0 then \
+		local rts = {} \
+		for k,v in ipairs(arg) do \
+			rts[k] = coroutine_wait(v) \
+		end \
+		return rts \
+	end \
 end \
 function newthread(f,n1,n2,n3,n4,n5) local F = _cocreate(function(n1,n2,n3,n4,n5) local R = {f(n1,n2,n3,n4,n5)} local t = coroutine_resume_waiting(unpack(R)) if t then allthreads[t] = R end return unpack(R) end) local r,e = _coresume(F,n1,n2,n3,n4,n5) if e then return nil,e end allthreads[F]=1 return F end");
 
