@@ -1,4 +1,5 @@
 #include "coevent.h"
+#include "connection-pool.h"
 
 long longtime()
 {
@@ -84,10 +85,10 @@ int tcp_connect ( const char *host, int port, cosocket_t *cok, int epoll_fd, int
     }
 
     if ( cok->pool_size > 0 ) {
-        sockfd = get_connection_in_pool ( epoll_fd, cok->pool_key );
+        cok->ptr = get_connection_in_pool ( epoll_fd, cok->pool_key );
     }
 
-    if ( sockfd == -1 ) {
+    if ( !cok->ptr ) {
         if ( ( sockfd = socket ( port > 0 ? AF_INET : AF_UNIX, SOCK_STREAM, 0 ) ) < 0 ) {
             return -1;
         }
@@ -97,24 +98,20 @@ int tcp_connect ( const char *host, int port, cosocket_t *cok, int epoll_fd, int
             return -1;
         }
 
+        cok->fd = sockfd;
         connection_pool_counter_operate ( cok->pool_key, 1 );
         cok->reusedtimes = 0;
 
     } else {
+        cok->fd = ( ( se_ptr_t * ) cok->ptr )->fd;
+        ( ( se_ptr_t * ) cok->ptr )->data = cok;
         cok->reusedtimes = 1;
         *ret = 0;
-        return sockfd;
+        return cok->fd;
     }
 
-    struct epoll_event ev;
-
-    cok->fd = sockfd;
-
-    ev.data.ptr = cok;
-
-    ev.events = EPOLLOUT;
-
-    epoll_ctl ( epoll_fd, EPOLL_CTL_ADD, sockfd, &ev );
+    cok->ptr = se_add ( epoll_fd, sockfd, cok );
+    se_be_write ( cok->ptr, cosocket_be_connected );
 
     add_to_timeout_link ( cok, cok->timeout / 2 );
 
@@ -287,13 +284,13 @@ int chk_do_timeout_link ( int epoll_fd )
                 //printf("fd timeout %d %d %ld\n", cok->fd,cok->dns_query_fd, _tl->timeout);
 
                 if ( cok->dns_query_fd > -1 ) {
-                    epoll_ctl ( epoll_fd, EPOLL_CTL_DEL, cok->dns_query_fd, &ev );
+                    se_delete ( cok->ptr );
                     close ( cok->dns_query_fd );
                     cok->dns_query_fd = -1;
-                }
 
-                {
-                    epoll_ctl ( epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev );
+                } else {
+                    se_delete ( cok->ptr );
+                    cok->ptr = NULL;
                     close ( cok->fd );
                     connection_pool_counter_operate ( cok->pool_key, -1 );
                     cok->fd = -1;
@@ -303,23 +300,8 @@ int chk_do_timeout_link ( int epoll_fd )
                 lua_pushnil ( cok->L );
                 lua_pushstring ( cok->L, "timeout!" );
                 cok->inuse = 0;
-                int ret = lua_resume ( cok->L, 2 );
 
-                if ( ret == LUA_ERRRUN && lua_isstring ( cok->L, -1 ) ) {
-                    //printf("%s:%d isstring: %s\n", __FILE__,__LINE__, lua_tostring(cok->L, -1));
-                    if ( lua_gettop ( cok->L ) > 1 ) {
-                        lua_replace ( cok->L, 2 );
-                        lua_pushnil ( cok->L );
-                        lua_replace ( cok->L, 1 );
-                        lua_settop ( cok->L, 2 );
-
-                    } else {
-                        lua_pushnil ( cok->L );
-                        lua_replace ( cok->L, 1 );
-                    }
-
-                    lua_f_coroutine_resume_waiting ( cok->L );
-                }
+                lua_co_resume ( cok->L, 2 );
             }
 
             _tl = _ttl;

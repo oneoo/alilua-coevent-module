@@ -21,6 +21,8 @@
 #include <lua.h>
 #include <lauxlib.h>
 
+#include "../se/se.h"
+
 #define free(p) do { if (p) { free(p); p = NULL; } } while (0)
 #define close(fd) do { if (fd >= 0) { close(fd); fd = -1; } } while (0)
 
@@ -72,29 +74,6 @@ typedef struct {
 } dns_cache_item_t;
 
 typedef struct {
-    long     count;
-    unsigned long pool_key;
-    void   *next;
-    void   *uper;
-} cosocket_connection_pool_counter_t;
-
-typedef struct {
-    void *cok;
-    void *next;
-    void *uper;
-    void *z2;
-} cosocket_waiting_get_connection_t;
-
-typedef struct {
-    uint8_t type;
-    uint8_t recached;
-    int fd;
-    unsigned long pool_key;
-    void *next;
-    void *uper;
-} cosocket_connection_pool_t;
-
-typedef struct {
     uint8_t type;
     int fd;
     int status;
@@ -144,6 +123,8 @@ typedef struct {
 } dns_query_header_t;
 
 #define NULL32 NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+int lua_co_resume ( lua_State *L , int args );
+int cosocket_be_connected ( se_ptr_t *ptr );
 int coevent_setnonblocking ( int fd );
 int add_to_timeout_link ( cosocket_t *cok, int timeout );
 int del_in_timeout_link ( cosocket_t *cok );
@@ -152,13 +133,8 @@ int chk_do_timeout_link ( int epoll_fd );
 
 void add_dns_cache ( const char *name, struct in_addr addr, int do_recache );
 int do_dns_query ( int epoll_fd, cosocket_t *cok, const char *name );
-void parse_dns_result ( int epoll_fd, int fd, cosocket_t *cok, const unsigned char *pkt,
-                        int len );
-cosocket_connection_pool_counter_t *get_connection_pool_counter (
-    unsigned long pool_key );
 
-void connection_pool_counter_operate ( unsigned long pool_key, int a );
-int add_waiting_get_connection ( cosocket_t *cok );
+
 long longtime();
 
 int tcp_connect ( const char *host, int port, cosocket_t *cok, int epoll_fd, int *ret );
@@ -173,6 +149,7 @@ int lua_f_sha1bin ( lua_State *L );
 int lua_f_base64_encode ( lua_State *L );
 int lua_f_base64_decode ( lua_State *L );
 
+int cosocket_lua_f_escape ( lua_State *L );
 int lua_f_escape_uri ( lua_State *L );
 int lua_f_unescape_uri ( lua_State *L );
 

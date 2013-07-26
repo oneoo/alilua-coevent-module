@@ -1,10 +1,12 @@
 #include "coevent.h"
+#include "connection-pool.h"
+
+#define NTOHS(p) (((p)[0] << 8) | (p)[1])
 
 void *dns_cache[3][64] = {{NULL32 NULL32}, {NULL32 NULL32}, {NULL32 NULL32}};
 int dns_cache_ttl = 180;
 
-int
-get_dns_cache ( const char *name, struct in_addr *addr )
+int get_dns_cache ( const char *name, struct in_addr *addr )
 {
     int p = ( timer / dns_cache_ttl ) % 3;
     dns_cache_item_t *n = NULL,
@@ -53,8 +55,7 @@ get_dns_cache ( const char *name, struct in_addr *addr )
     return 0;
 }
 
-void
-add_dns_cache ( const char *name, struct in_addr addr, int do_recache )
+void add_dns_cache ( const char *name, struct in_addr addr, int do_recache )
 {
     time ( &timer );
     int p = ( timer / dns_cache_ttl ) % 3;
@@ -117,8 +118,200 @@ struct sockaddr_in dns_servers[4];
 int dns_server_count = 0;
 char pkt[2048];
 
-int
-do_dns_query ( int epoll_fd, cosocket_t *cok, const char *name )
+int be_get_dns_result ( se_ptr_t *ptr )
+{
+    cosocket_t *cok = ptr->data;
+    int epoll_fd = ptr->epoll_fd;
+
+    int len = 0;
+
+    while ( ( len = recvfrom ( cok->dns_query_fd, pkt, 2048, 0, NULL, NULL ) ) > 0
+            && len >= sizeof ( dns_query_header_t ) ) {
+        int fd = ptr->fd;
+        se_delete ( ptr );
+        close ( fd );
+        cok->ptr = NULL;
+
+        const unsigned char *p = NULL,
+                             *e = NULL,
+                              *s = NULL;
+        dns_query_header_t *header = NULL;
+        uint16_t type = 0;
+        int found = 0, stop = 0, dlen = 0, nlen = 0, i = 0;
+        int err = 0;
+        header = ( dns_query_header_t * ) pkt;
+
+        if ( ntohs ( header->nqueries ) != 1 ) {
+            err = 1;
+        }
+
+        if ( header->tid != cok->dns_tid ) {
+            err = 1;
+        }
+
+        /* Skip host name */
+        if ( err == 0 ) {
+            for ( e = pkt + len, nlen = 0, s = p = &header->data[0]; p < e && *p != '\0'; p++ ) {
+                nlen++;
+            }
+        }
+
+        /* We sent query class 1, query type 1 */
+        if ( &p[5] > e || NTOHS ( p + 1 ) != 0x01 ) {
+            err = 1;
+        }
+
+        struct in_addr ips[10];
+
+        /* Go to the first answer section */
+        if ( err == 0 ) {
+            p += 5;
+
+            /* Loop through the answers, we want A type answer */
+            for ( found = stop = 0; !stop && &p[12] < e; ) {
+                /* Skip possible name in CNAME answer */
+                if ( *p != 0xc0 ) {
+                    while ( *p && &p[12] < e ) {
+                        p++;
+                    }
+
+                    p--;
+                }
+
+                type = htons ( ( ( uint16_t * ) p ) [1] );
+
+                if ( type == 5 ) {
+                    /* CNAME answer. shift to the next section */
+                    dlen = htons ( ( ( uint16_t * ) p ) [5] );
+                    p += 12 + dlen;
+
+                } else if ( type == 0x01 ) {
+                    dlen = htons ( ( ( uint16_t * ) p ) [5] );
+                    p += 12;
+
+                    if ( p + dlen <= e ) {
+                        memcpy ( &ips[found], p, dlen );
+                    }
+
+                    p += dlen;
+
+                    if ( ++found == header->nanswers ) {
+                        stop = 1;
+                    }
+
+                    if ( found >= 10 ) {
+                        break;
+                    }
+
+                } else {
+                    stop = 1;
+                }
+            }
+        }
+
+        if ( found > 0 ) {
+            cok->addr.sin_addr = ips[cok->dns_query_fd % found];
+            int sockfd = -1;
+
+            add_dns_cache ( cok->dns_query_name, cok->addr.sin_addr, 0 );
+
+            if ( cok->pool_size > 0 ) {
+                cok->ptr = get_connection_in_pool ( epoll_fd, cok->pool_key );
+            }
+
+            int ret = -1;
+
+            if ( !cok->ptr ) {
+                if ( ( sockfd = socket ( AF_INET, SOCK_STREAM, 0 ) ) < 0 ) {
+                    lua_pushnil ( cok->L );
+                    lua_pushstring ( cok->L, "Init socket error!1" );
+                    cok->inuse = 0;
+                    int ret = lua_resume ( cok->L, 2 );
+
+                    if ( ret == LUA_ERRRUN && lua_isstring ( cok->L, -1 ) ) {
+                        printf ( "%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring ( cok->L, -1 ) );
+                        lua_pop ( cok->L, -1 );
+                    }
+
+                    return;
+                }
+
+                cok->fd = sockfd;
+
+                if ( !coevent_setnonblocking ( cok->fd ) ) {
+                    close ( cok->fd );
+                    lua_pushnil ( cok->L );
+                    lua_pushstring ( cok->L, "Init socket error!2" );
+                    cok->inuse = 0;
+                    int ret = lua_resume ( cok->L, 2 );
+
+                    if ( ret == LUA_ERRRUN && lua_isstring ( cok->L, -1 ) ) {
+                        printf ( "%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring ( cok->L, -1 ) );
+                        lua_pop ( cok->L, -1 );
+                    }
+
+                    return;
+                }
+
+                cok->reusedtimes = 0;
+
+                connection_pool_counter_operate ( cok->pool_key, 1 );
+
+                ret = connect ( cok->fd, ( struct sockaddr * ) &cok->addr,
+                                sizeof ( struct sockaddr ) );
+                cok->fd = sockfd;
+                cok->ptr = se_add ( epoll_fd, sockfd, cok );
+
+            } else {
+                ( ( se_ptr_t * ) cok->ptr )->data = cok;
+                cok->reusedtimes = 1;
+                cok->fd = ( ( se_ptr_t * ) cok->ptr )->fd;
+            }
+
+
+
+
+            if ( cok->reusedtimes == 0 ) {
+                se_be_write ( cok->ptr, cosocket_be_connected );
+            }
+
+
+            if ( ret == 0 || cok->reusedtimes > 0 ) {
+                ///////// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! connected /////
+                lua_pushboolean ( cok->L, 1 );
+                cok->inuse = 0;
+                int ret = lua_resume ( cok->L, 1 );
+
+                if ( ret == LUA_ERRRUN && lua_isstring ( cok->L, -1 ) ) {
+                    printf ( "%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring ( cok->L, -1 ) );
+                    lua_pop ( cok->L, -1 );
+                }
+            }
+
+            return;
+        }
+
+        {
+            cok->fd = -1;
+            cok->status = 0;
+            lua_pushnil ( cok->L );
+            lua_pushstring ( cok->L, "names lookup error!" );
+            cok->inuse = 0;
+            int ret = lua_resume ( cok->L, 2 );
+
+            if ( ret == LUA_ERRRUN && lua_isstring ( cok->L, -1 ) ) {
+                printf ( "%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring ( cok->L, -1 ) );
+                lua_pop ( cok->L, -1 );
+            }
+        }
+
+        break;
+    }
+
+    return 0;
+}
+
+int do_dns_query ( int epoll_fd, cosocket_t *cok, const char *name )
 {
     if ( dns_server_count == 0 ) { /// init dns servers
         int p1 = 0,
@@ -204,10 +397,7 @@ do_dns_query ( int epoll_fd, cosocket_t *cok, const char *name )
     name = cok->dns_query_name;
     int opt = 1;
     ioctl ( cok->dns_query_fd, FIONBIO, &opt );
-    ev.events = EPOLLIN | EPOLLET;
-    ev.data.fd = cok->dns_query_fd;
-    ev.data.ptr = cok;
-    epoll_ctl ( epoll_fd, EPOLL_CTL_ADD, cok->dns_query_fd, &ev );
+
     int i = 0, n = 0, m = 0;
     dns_query_header_t *header = NULL;
     const char *s;
@@ -248,6 +438,10 @@ do_dns_query ( int epoll_fd, cosocket_t *cok, const char *name )
     *p++ = 0;
     *p++ = 1;           /* Class: inet, 0x0001 */
     n = p - pkt;        /* Total packet length */
+
+    cok->ptr = se_add ( epoll_fd, cok->dns_query_fd, cok );
+    se_be_read ( cok->ptr, be_get_dns_result );
+
     sendto (
         cok->dns_query_fd,
         pkt,
@@ -270,186 +464,4 @@ do_dns_query ( int epoll_fd, cosocket_t *cok, const char *name )
     }
 
     return 1;
-}
-
-#define NTOHS(p)    (((p)[0] << 8) | (p)[1])
-
-void
-parse_dns_result ( int epoll_fd, int fd, cosocket_t *cok, const unsigned char *pkt,
-                   int len )
-{
-    struct epoll_event ev;
-    epoll_ctl ( epoll_fd, EPOLL_CTL_DEL, fd, &ev );
-    const unsigned char *p = NULL,
-                         *e = NULL,
-                          *s = NULL;
-    dns_query_header_t *header = NULL;
-    uint16_t type = 0;
-    int found = 0, stop = 0, dlen = 0, nlen = 0, i = 0;
-    int err = 0;
-    header = ( dns_query_header_t * ) pkt;
-
-    if ( ntohs ( header->nqueries ) != 1 ) {
-        err = 1;
-    }
-
-    if ( header->tid != cok->dns_tid ) {
-        err = 1;
-    }
-
-    /* Skip host name */
-    if ( err == 0 ) {
-        for ( e = pkt + len, nlen = 0, s = p = &header->data[0]; p < e && *p != '\0'; p++ ) {
-            nlen++;
-        }
-    }
-
-    /* We sent query class 1, query type 1 */
-    if ( &p[5] > e || NTOHS ( p + 1 ) != 0x01 ) {
-        err = 1;
-    }
-
-    struct in_addr ips[10];
-
-    /* Go to the first answer section */
-    if ( err == 0 ) {
-        p += 5;
-
-        /* Loop through the answers, we want A type answer */
-        for ( found = stop = 0; !stop && &p[12] < e; ) {
-            /* Skip possible name in CNAME answer */
-            if ( *p != 0xc0 ) {
-                while ( *p && &p[12] < e ) {
-                    p++;
-                }
-
-                p--;
-            }
-
-            type = htons ( ( ( uint16_t * ) p ) [1] );
-
-            if ( type == 5 ) {
-                /* CNAME answer. shift to the next section */
-                dlen = htons ( ( ( uint16_t * ) p ) [5] );
-                p += 12 + dlen;
-
-            } else if ( type == 0x01 ) {
-                dlen = htons ( ( ( uint16_t * ) p ) [5] );
-                p += 12;
-
-                if ( p + dlen <= e ) {
-                    memcpy ( &ips[found], p, dlen );
-                }
-
-                p += dlen;
-
-                if ( ++found == header->nanswers ) {
-                    stop = 1;
-                }
-
-                if ( found >= 10 ) {
-                    break;
-                }
-
-            } else {
-                stop = 1;
-            }
-        }
-    }
-
-    if ( found > 0 ) {
-        cok->addr.sin_addr = ips[cok->dns_query_fd % found];
-        int sockfd = -1;
-
-        if ( cok->pool_size > 0 ) {
-            sockfd = get_connection_in_pool ( epoll_fd, cok->pool_key );
-        }
-
-        if ( sockfd != -1 ) {
-            cok->fd = sockfd;
-            cok->status = 2;
-            lua_pushboolean ( cok->L, 1 );
-            cok->inuse = 0;
-            int ret = lua_resume ( cok->L, 1 );
-
-            if ( ret == LUA_ERRRUN && lua_isstring ( cok->L, -1 ) ) {
-                printf ( "%s,%d isstring: %s\n", __FILE__, __LINE__, lua_tostring ( cok->L, -1 ) );
-                lua_pop ( cok->L, -1 );
-            }
-
-            cok->reusedtimes = 1;
-            return;
-        }
-
-        if ( ( sockfd = socket ( AF_INET, SOCK_STREAM, 0 ) ) < 0 ) {
-            lua_pushnil ( cok->L );
-            lua_pushstring ( cok->L, "Init socket error!" );
-            cok->inuse = 0;
-            int ret = lua_resume ( cok->L, 2 );
-
-            if ( ret == LUA_ERRRUN && lua_isstring ( cok->L, -1 ) ) {
-                printf ( "%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring ( cok->L, -1 ) );
-                lua_pop ( cok->L, -1 );
-            }
-
-            return;
-        }
-
-        connection_pool_counter_operate ( cok->pool_key, 1 );
-        cok->fd = sockfd;
-
-        if ( !coevent_setnonblocking ( cok->fd ) ) {
-            close ( cok->fd );
-            lua_pushnil ( cok->L );
-            lua_pushstring ( cok->L, "Init socket error!" );
-            cok->inuse = 0;
-            int ret = lua_resume ( cok->L, 2 );
-
-            if ( ret == LUA_ERRRUN && lua_isstring ( cok->L, -1 ) ) {
-                printf ( "%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring ( cok->L, -1 ) );
-                lua_pop ( cok->L, -1 );
-            }
-
-            return;
-        }
-
-        cok->reusedtimes = 0;
-        ev.data.ptr = cok;
-        ev.events = EPOLLOUT;
-        epoll_ctl ( epoll_fd, EPOLL_CTL_ADD, cok->fd, &ev );
-        add_dns_cache ( cok->dns_query_name, cok->addr.sin_addr, 0 );
-        int ret = connect ( cok->fd, ( struct sockaddr * ) &cok->addr,
-                            sizeof ( struct sockaddr ) );
-
-        if ( ret == 0 ) {
-            ///////// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! connected /////
-            lua_pushboolean ( cok->L, 1 );
-            cok->inuse = 0;
-            int ret = lua_resume ( cok->L, 1 );
-
-            if ( ret == LUA_ERRRUN && lua_isstring ( cok->L, -1 ) ) {
-                printf ( "%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring ( cok->L, -1 ) );
-                lua_pop ( cok->L, -1 );
-            }
-        }
-
-        return;
-    }
-
-    {
-        epoll_ctl ( epoll_fd, EPOLL_CTL_DEL, cok->fd, &ev );
-        close ( cok->fd );
-        connection_pool_counter_operate ( cok->pool_key, -1 );
-        cok->fd = -1;
-        cok->status = 0;
-        lua_pushnil ( cok->L );
-        lua_pushstring ( cok->L, "names lookup error!" );
-        cok->inuse = 0;
-        int ret = lua_resume ( cok->L, 2 );
-
-        if ( ret == LUA_ERRRUN && lua_isstring ( cok->L, -1 ) ) {
-            printf ( "%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring ( cok->L, -1 ) );
-            lua_pop ( cok->L, -1 );
-        }
-    }
 }

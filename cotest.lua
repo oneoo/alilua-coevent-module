@@ -87,6 +87,7 @@ print('used:'..((longtime()-st)/1000))
 	
 	res, err = db:get_results("SELECT * FROM cats")
 	print('rt', cjson.encode(res))
+    print('--------------------------')
 	
 	print('test_mysql be end  used:'..((longtime()-st)/1000));
 	coroutine_wait(t)
@@ -168,13 +169,13 @@ function test_redis()
 end
 
 function test_http_client(id, host, uri)
-	--print('start test_http_client', id, host, uri)
+	print('start test_http_client', id, host, uri)
 	local cok = cosocket.tcp()
 	local r,e = cok:connect(host, 80)
 	--print(abc..'cc')
 
 	if not r then print(1, e) return false end
-	--print('----------------------------------------connected!!!', id)
+	print('----------------------------------------connected!!!', id)
 	
 	if not uri then
 		cok:send('GET / HTTP/1.1\r\nHost: '..host..'\r\nUser-Agent: Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.7.6)\r\n')
@@ -212,7 +213,7 @@ function test_http_client(id, host, uri)
 	cok:close()
 	cok = nil
 --print(oss)
-	--print('test_http_client ended', id, (oss:find('</html>') or oss:find('2006')) and true or false, oss)
+	print('test_http_client ended', id, (oss:find('</html>') or oss:find('2006')) and true or false, oss)
 	if not e and not s then os.exit(1) end
 	return id, (oss:find('</html>') or oss:find('2006')) and true or false, kc
 end

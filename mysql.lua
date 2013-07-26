@@ -701,6 +701,7 @@ function set_keepalive(self, ...)
     end
 
     self.state = nil
+    if not ngx then return true end
     return sock:setkeepalive(...)
 end
 

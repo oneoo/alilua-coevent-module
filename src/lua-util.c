@@ -197,3 +197,102 @@ unsigned char *lua_copy_str_in_table ( lua_State *L, int index, u_char *dst )
 
     return dst;
 }
+
+static char _1_temp_buf[4096];
+//Characters encoded are NUL (ASCII 0), \n, \r, \, ', ", and Control-Z.
+int cosocket_lua_f_escape ( lua_State *L )
+{
+    const char *src = NULL;
+    size_t slen = 0;
+
+    if ( lua_isnil ( L, 1 ) ) {
+        src = "";
+
+    } else {
+        src = luaL_checklstring ( L, 1, &slen );
+    }
+
+    if ( src == 0 ) {
+        lua_pushstring ( L, "" );
+        return 1;
+    }
+
+    char *dst = _1_temp_buf;
+    int i = 0, j = 0, has = 0;
+
+    for ( i = 0; i < slen; i++ ) {
+        if ( j >= 4 ) {
+            lua_pushlstring ( L, _1_temp_buf, j );
+
+            if ( has == 1 ) {
+                lua_concat ( L, 2 );
+            }
+
+            has = 1;
+            j = 0;
+        }
+
+        switch ( src[i] ) {
+            case '\r':
+                _1_temp_buf[j++] = '\\';
+                _1_temp_buf[j++] = 'r';
+                continue;
+                break;
+
+            case '\n':
+                _1_temp_buf[j++] = '\\';
+                _1_temp_buf[j++] = 'n';
+                continue;
+                break;
+
+            case '\\':
+                _1_temp_buf[j++] = '\\';
+                break;
+
+            case '\'':
+                _1_temp_buf[j++] = '\\';
+                break;
+
+            case '"':
+                _1_temp_buf[j++] = '\\';
+                break;
+
+            case '\b':
+                _1_temp_buf[j++] = '\\';
+                _1_temp_buf[j++] = 'b';
+                continue;
+                break;
+
+            case '\t':
+                _1_temp_buf[j++] = '\\';
+                _1_temp_buf[j++] = 't';
+                continue;
+                break;
+
+            case '\0':
+                _1_temp_buf[j++] = '\\';
+                _1_temp_buf[j++] = '0';
+                continue;
+                break;
+
+            case '\032':
+                _1_temp_buf[j++] = '\\';
+                _1_temp_buf[j++] = 'Z';
+                continue;
+                break;
+
+            default:
+                break;
+        }
+
+        _1_temp_buf[j++] = src[i];
+    }
+
+    lua_pushlstring ( L, _1_temp_buf, j );
+
+    if ( has == 1 ) {
+        lua_concat ( L, 2 );
+    }
+
+    return 1;
+}
