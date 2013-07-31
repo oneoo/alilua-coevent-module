@@ -1,8 +1,7 @@
 local L = require('coevent')
 local httpclient = require('httpclient')
 print('start')
-for i=1,1000 do
-os.execute('sleep 1')
+
 print(L(function()
 
 	local t,e = httpclient('https://www.upyun.com', {
@@ -18,5 +17,5 @@ print(L(function()
 	
 end
 ))
-end
+
 print('end')
