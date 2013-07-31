@@ -103,6 +103,8 @@ Epoll loop Directives
 cosocket Directives
 ---------
 ###cosocket.tcp()
+**syntax:** cok = cosocket.tcp([ssl = true])
+
 Creates and returns a TCP or stream-oriented unix domain socket object, The following methods are supported on this object:
 
 * connect
@@ -167,12 +169,12 @@ Creates a user Lua coroutines with a Lua function, and returns a coroutine objec
 Similar to the standard Lua coroutine.create API, but works in the context of the Lua coroutines created by alilua.
 
 ###coroutine_wait
-**synctx:** returns = coroutine_wait(t)
+**syntax:** returns = coroutine_wait(t)
 
 Waits on one child "light threads" and returns the results (either successfully or with an error).
 
 ###swop
-**synctx:** swop()
+**syntax:** swop()
 
 Sleeps for the little times without blocking.
 
