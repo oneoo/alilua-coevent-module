@@ -55,10 +55,7 @@ local f = function()
     end
     
     db:close()
-    for i=1,60 do
-        os.execute("sleep 1")
-        db2:query("select * from t1")
-    end
+
     db2:close()
 end
 
