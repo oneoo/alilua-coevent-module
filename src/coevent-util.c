@@ -28,10 +28,10 @@ int coevent_setblocking ( int fd, int blocking )
 
 static struct hostent *localhost_ent = NULL;
 
-int tcp_connect ( const char *host, int port, cosocket_t *cok, int epoll_fd, int *ret )
+int tcp_connect ( const char *host, int port, cosocket_t *cok, int loop_fd, int *ret )
 {
     int sockfd = -1;
-    bzero ( &cok->addr, sizeof ( struct sockaddr_in ) );
+    bzero ( ( void * ) &cok->addr, sizeof ( struct sockaddr_in ) );
 
     if ( port > 0 ) {
         cok->addr.sin_family = AF_INET;
@@ -54,7 +54,7 @@ int tcp_connect ( const char *host, int port, cosocket_t *cok, int epoll_fd, int
                     } else {
                         cok->fd = -1;
 
-                        if ( !do_dns_query ( epoll_fd, cok, host ) ) {
+                        if ( !do_dns_query ( loop_fd, cok, host ) ) {
                             return -3;
                         }
 
@@ -79,13 +79,13 @@ int tcp_connect ( const char *host, int port, cosocket_t *cok, int epoll_fd, int
                     return -2;
                 }
 
-                cok->addr.sin_addr.s_addr = ( ( struct in_addr * ) phost->h_addr )->s_addr;
+                cok->addr.sin_addr.s_addr = ( ( struct in_addr * ) phost->h_addr_list[0] )->s_addr;
             }
         }
     }
 
     if ( cok->pool_size > 0 ) {
-        cok->ptr = get_connection_in_pool ( epoll_fd, cok->pool_key, cok );
+        cok->ptr = get_connection_in_pool ( loop_fd, cok->pool_key, cok );
     }
 
     if ( !cok->ptr ) {
@@ -110,7 +110,7 @@ int tcp_connect ( const char *host, int port, cosocket_t *cok, int epoll_fd, int
         return cok->fd;
     }
 
-    cok->ptr = se_add ( epoll_fd, sockfd, cok );
+    cok->ptr = se_add ( loop_fd, sockfd, cok );
     se_be_write ( cok->ptr, cosocket_be_connected );
 
     add_to_timeout_link ( cok, cok->timeout / 2 );
@@ -141,7 +141,6 @@ int add_to_timeout_link ( cosocket_t *cok, int timeout )
     timeout_link_t  *_tl = NULL,
                      *_tll = NULL,
                       *_ntl = NULL;
-    int add = 0;
 
     if ( timeout < 10 ) {
         timeout = 1000;
@@ -162,14 +161,12 @@ int add_to_timeout_link ( cosocket_t *cok, int timeout )
         return 1;
 
     } else {
-        add = 1;
         _tl = timeout_links[p];
 
         while ( _tl ) {
             _tll = _tl; /// get last item
 
             if ( _tl->cok == cok ) {
-                add = 0;
                 break;
             }
 
@@ -239,14 +236,13 @@ int del_in_timeout_link ( cosocket_t *cok )
     return 0;
 }
 
-int chk_do_timeout_link ( int epoll_fd )
+int chk_do_timeout_link ( int loop_fd )
 {
     long nt = longtime();
     timeout_link_t  *_tl = NULL,
                      *_ttl = NULL,
                       *_utl = NULL,
                        *_ntl = NULL;
-    struct epoll_event ev;
     int i = 0;
 
     for ( i = 0; i < 64; i++ ) {
@@ -316,4 +312,6 @@ int chk_do_timeout_link ( int epoll_fd )
             _tl = _ttl;
         }
     }
+
+    return 0;
 }

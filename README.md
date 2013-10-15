@@ -10,6 +10,12 @@ $cd alilua-coevent-module
 
 $sudo make install clean
 
+#####With Luajit
+
+$sudo make LUAJIT=/usr/local/lib install clean
+
+###Not Support Lua on Mac OS, But Luajit Supported!
+
 Start
 --------
 ###single loop

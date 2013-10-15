@@ -1,18 +1,17 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/timeb.h>
 #include <time.h>
 #include <math.h>
-#include <sys/epoll.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <asm/ioctls.h>
 #include <sys/un.h>
 #include <inttypes.h>
 #include <zlib.h>
@@ -29,12 +28,8 @@
 #define free(p) do { if (p) { free(p); p = NULL; } } while (0)
 #define close(fd) do { if (fd >= 0) { close(fd); fd = -1; } } while (0)
 
-#ifndef _COTEST_H
-#define _COTEST_H
-
-#define EPOLL_PTR_TYPE_MAIN 1
-#define EPOLL_PTR_TYPE_COSOCKET 2
-#define EPOLL_PTR_TYPE_COSOCKET_WAIT 3
+#ifndef _COEVENT_H
+#define _COEVENT_H
 
 #define large_malloc(s) (malloc(((int)(s/4096)+1)*4096))
 #define A_C_R "\x1b[31m"
@@ -53,6 +48,10 @@
 #define cc_printf(fmt, ...) printf("%s" fmt "%s", A_C_C, ##__VA_ARGS__, A_C__)
 
 time_t timer;
+
+#ifndef u_char
+#define u_char unsigned char
+#endif
 
 typedef struct {
     lua_State *L;
@@ -76,6 +75,7 @@ typedef struct {
     void       *next;
 } dns_cache_item_t;
 
+#define _SENDBUF_SIZE 3857
 typedef struct {
     int fd;
     uint8_t use_ssl;
@@ -87,7 +87,7 @@ typedef struct {
     void *ptr;
     lua_State *L;
     const u_char *send_buf;
-    u_char _send_buf[3857];// with size align / 60
+    u_char _send_buf[_SENDBUF_SIZE];// with size align / 60
     size_t send_buf_len;
     size_t send_buf_ed;
     u_char *send_buf_need_free;
@@ -137,15 +137,18 @@ int coevent_setblocking ( int fd, int blocking );
 int add_to_timeout_link ( cosocket_t *cok, int timeout );
 int del_in_timeout_link ( cosocket_t *cok );
 int lua_f_coroutine_resume_waiting ( lua_State *L );
-int chk_do_timeout_link ( int epoll_fd );
+int chk_do_timeout_link ( int loop_fd );
 
+int get_dns_cache ( const char *name, struct in_addr *addr );
 void add_dns_cache ( const char *name, struct in_addr addr, int do_recache );
-int do_dns_query ( int epoll_fd, cosocket_t *cok, const char *name );
+int do_dns_query ( int loop_fd, cosocket_t *cok, const char *name );
 
 
 long longtime();
 
-int tcp_connect ( const char *host, int port, cosocket_t *cok, int epoll_fd, int *ret );
+int tcp_connect ( const char *host, int port, cosocket_t *cok, int loop_fd, int *ret );
+int add_connection_to_pool ( int loop_fd, unsigned long pool_key, int pool_size,
+                             se_ptr_t *ptr, void *ssl, void *ctx );
 
 int lua_f_time ( lua_State *L );
 int lua_f_longtime ( lua_State *L );
@@ -161,6 +164,6 @@ int cosocket_lua_f_escape ( lua_State *L );
 int lua_f_escape_uri ( lua_State *L );
 int lua_f_unescape_uri ( lua_State *L );
 
-uint32_t fnv1a_32 ( const char *data, uint32_t len );
-uint32_t fnv1a_64 ( const char *data, uint32_t len );
+uint32_t fnv1a_32 ( const unsigned char *data, uint32_t len );
+uint32_t fnv1a_64 ( const unsigned char *data, uint32_t len );
 #endif

@@ -218,11 +218,16 @@ int cosocket_lua_f_escape ( lua_State *L )
     }
 
     char *dst = _1_temp_buf;
+
+    if ( slen > 2048 ) {
+        dst = large_malloc ( slen * 2 );
+    }
+
     int i = 0, j = 0, has = 0;
 
     for ( i = 0; i < slen; i++ ) {
         if ( j >= 4 ) {
-            lua_pushlstring ( L, _1_temp_buf, j );
+            lua_pushlstring ( L, dst, j );
 
             if ( has == 1 ) {
                 lua_concat ( L, 2 );
@@ -234,50 +239,50 @@ int cosocket_lua_f_escape ( lua_State *L )
 
         switch ( src[i] ) {
             case '\r':
-                _1_temp_buf[j++] = '\\';
-                _1_temp_buf[j++] = 'r';
+                dst[j++] = '\\';
+                dst[j++] = 'r';
                 continue;
                 break;
 
             case '\n':
-                _1_temp_buf[j++] = '\\';
-                _1_temp_buf[j++] = 'n';
+                dst[j++] = '\\';
+                dst[j++] = 'n';
                 continue;
                 break;
 
             case '\\':
-                _1_temp_buf[j++] = '\\';
+                dst[j++] = '\\';
                 break;
 
             case '\'':
-                _1_temp_buf[j++] = '\\';
+                dst[j++] = '\\';
                 break;
 
             case '"':
-                _1_temp_buf[j++] = '\\';
+                dst[j++] = '\\';
                 break;
 
             case '\b':
-                _1_temp_buf[j++] = '\\';
-                _1_temp_buf[j++] = 'b';
+                dst[j++] = '\\';
+                dst[j++] = 'b';
                 continue;
                 break;
 
             case '\t':
-                _1_temp_buf[j++] = '\\';
-                _1_temp_buf[j++] = 't';
+                dst[j++] = '\\';
+                dst[j++] = 't';
                 continue;
                 break;
 
             case '\0':
-                _1_temp_buf[j++] = '\\';
-                _1_temp_buf[j++] = '0';
+                dst[j++] = '\\';
+                dst[j++] = '0';
                 continue;
                 break;
 
             case '\032':
-                _1_temp_buf[j++] = '\\';
-                _1_temp_buf[j++] = 'Z';
+                dst[j++] = '\\';
+                dst[j++] = 'Z';
                 continue;
                 break;
 
@@ -285,10 +290,14 @@ int cosocket_lua_f_escape ( lua_State *L )
                 break;
         }
 
-        _1_temp_buf[j++] = src[i];
+        dst[j++] = src[i];
     }
 
-    lua_pushlstring ( L, _1_temp_buf, j );
+    lua_pushlstring ( L, dst, j );
+
+    if ( dst != _1_temp_buf ) {
+        free ( dst );
+    }
 
     if ( has == 1 ) {
         lua_concat ( L, 2 );

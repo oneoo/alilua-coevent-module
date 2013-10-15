@@ -105,11 +105,11 @@ static int base64decode ( unsigned char *dst, const unsigned char *src, size_t s
     };
     return base64_decode_internal ( dst, src, slen, basis64 );
 }
-
+/*
 static int base64decode_url ( unsigned char *dst, const unsigned char *src,
                               size_t slen )
 {
-    static char basis64[] = {
+    static unsigned char basis64[] = {
         77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
         77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77,
         77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 77, 62, 77, 77,
@@ -130,41 +130,41 @@ static int base64decode_url ( unsigned char *dst, const unsigned char *src,
     };
     return base64_decode_internal ( dst, src, slen, basis64 );
 }
-
+*/
 int lua_f_base64_encode ( lua_State *L )
 {
-    const char *src = NULL;
+    const unsigned char *src = NULL;
     size_t slen = 0;
 
     if ( lua_isnil ( L, 1 ) ) {
-        src = "";
+        src = ( const unsigned char * ) "";
 
     } else {
-        src = luaL_checklstring ( L, 1, &slen );
+        src = ( const unsigned char * ) luaL_checklstring ( L, 1, &slen );
     }
 
-    char *end = large_malloc ( base64_encoded_length ( slen ) );
+    unsigned char *end = large_malloc ( base64_encoded_length ( slen ) );
     int nlen = base64encode ( end, src, slen );
-    lua_pushlstring ( L, end, nlen );
+    lua_pushlstring ( L, ( char * ) end, nlen );
     free ( end );
     return 1;
 }
 
 int lua_f_base64_decode ( lua_State *L )
 {
-    const char *src = NULL;
+    const unsigned char *src = NULL;
     size_t slen = 0;
 
     if ( lua_isnil ( L, 1 ) ) {
-        src = "";
+        src = ( const unsigned char * ) "";
 
     } else {
-        src = luaL_checklstring ( L, 1, &slen );
+        src = ( unsigned char * ) luaL_checklstring ( L, 1, &slen );
     }
 
-    char *end = large_malloc ( base64_decoded_length ( slen ) );
+    unsigned char *end = large_malloc ( base64_decoded_length ( slen ) );
     int nlen = base64decode ( end, src, slen );
-    lua_pushlstring ( L, end, nlen );
+    lua_pushlstring ( L, ( char * ) end, nlen );
     free ( end );
     return 1;
 }

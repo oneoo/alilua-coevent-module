@@ -1,6 +1,6 @@
 #include "coevent.h"
 
-uint32_t fnv1a_32 ( const char *data, uint32_t len )
+uint32_t fnv1a_32 ( const unsigned char *data, uint32_t len )
 {
     uint32_t rv = 0x811c9dc5U;
     uint32_t i = 0;
@@ -12,7 +12,7 @@ uint32_t fnv1a_32 ( const char *data, uint32_t len )
     return rv;
 }
 
-uint32_t fnv1a_64 ( const char *data, uint32_t len )
+uint32_t fnv1a_64 ( const unsigned char *data, uint32_t len )
 {
     uint64_t rv = 0xcbf29ce484222325UL;
     uint32_t i = 0;

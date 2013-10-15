@@ -1,7 +1,8 @@
 #include "coevent.h"
 #include "connection-pool.h"
+#include <sys/ioctl.h>
 
-#define NTOHS(p) (((p)[0] << 8) | (p)[1])
+#define _NTOHS(p) (((p)[0] << 8) | (p)[1])
 
 void *dns_cache[3][64] = {{NULL32 NULL32}, {NULL32 NULL32}, {NULL32 NULL32}};
 int dns_cache_ttl = 180;
@@ -29,8 +30,8 @@ int get_dns_cache ( const char *name, struct in_addr *addr )
 
     /// end
     int nlen = strlen ( name );
-    uint32_t key1 = fnv1a_32 ( name, nlen );
-    uint32_t key2 = fnv1a_64 ( name, nlen );
+    uint32_t key1 = fnv1a_32 ( ( unsigned char * ) name, nlen );
+    uint32_t key2 = fnv1a_64 ( ( unsigned char * ) name, nlen );
     n = dns_cache[p][key1 % 64];
 
     while ( n != NULL ) {
@@ -67,8 +68,8 @@ void add_dns_cache ( const char *name, struct in_addr addr, int do_recache )
     dns_cache_item_t *n = NULL,
                       *m = NULL;
     int nlen = strlen ( name );
-    uint32_t key1 = fnv1a_32 ( name, nlen );
-    uint32_t key2 = fnv1a_64 ( name, nlen );
+    uint32_t key1 = fnv1a_32 ( ( unsigned char * ) name, nlen );
+    uint32_t key2 = fnv1a_64 ( ( unsigned char * ) name, nlen );
     int k = key1 % 64;
     n = dns_cache[p][k];
 
@@ -116,19 +117,17 @@ void add_dns_cache ( const char *name, struct in_addr addr, int do_recache )
 uint16_t dns_tid = 0;
 struct sockaddr_in dns_servers[4];
 int dns_server_count = 0;
-char pkt[2048];
+unsigned char pkt[2048];
 
 int be_get_dns_result ( se_ptr_t *ptr )
 {
     cosocket_t *cok = ptr->data;
-    int epoll_fd = ptr->epoll_fd;
+    int loop_fd = ptr->loop_fd;
 
     int len = 0;
 
     while ( ( len = recvfrom ( cok->dns_query_fd, pkt, 2048, 0, NULL, NULL ) ) > 0
             && len >= sizeof ( dns_query_header_t ) ) {
-        int dns_query_fd = cok->dns_query_fd;
-        close ( cok->dns_query_fd );
         cok->dns_query_fd = -1;
         int fd = ptr->fd;
         se_delete ( ptr );
@@ -136,11 +135,10 @@ int be_get_dns_result ( se_ptr_t *ptr )
         cok->ptr = NULL;
 
         const unsigned char *p = NULL,
-                             *e = NULL,
-                              *s = NULL;
+                             *e = NULL;
         dns_query_header_t *header = NULL;
         uint16_t type = 0;
-        int found = 0, stop = 0, dlen = 0, nlen = 0, i = 0;
+        int found = 0, stop = 0, dlen = 0, nlen = 0;
         int err = 0;
         header = ( dns_query_header_t * ) pkt;
 
@@ -154,13 +152,13 @@ int be_get_dns_result ( se_ptr_t *ptr )
 
         /* Skip host name */
         if ( err == 0 ) {
-            for ( e = pkt + len, nlen = 0, s = p = &header->data[0]; p < e && *p != '\0'; p++ ) {
+            for ( e = pkt + len, nlen = 0, p = &header->data[0]; p < e && *p != '\0'; p++ ) {
                 nlen++;
             }
         }
 
         /* We sent query class 1, query type 1 */
-        if ( &p[5] > e || NTOHS ( p + 1 ) != 0x01 ) {
+        if ( &p[5] > e || _NTOHS ( p + 1 ) != 0x01 ) {
             err = 1;
         }
 
@@ -219,7 +217,7 @@ int be_get_dns_result ( se_ptr_t *ptr )
             add_dns_cache ( cok->dns_query_name, cok->addr.sin_addr, 0 );
 
             if ( cok->pool_size > 0 ) {
-                cok->ptr = get_connection_in_pool ( epoll_fd, cok->pool_key, cok );
+                cok->ptr = get_connection_in_pool ( loop_fd, cok->pool_key, cok );
             }
 
             int ret = -1;
@@ -236,7 +234,7 @@ int be_get_dns_result ( se_ptr_t *ptr )
                         lua_pop ( cok->L, -1 );
                     }
 
-                    return;
+                    return 0;
                 }
 
                 cok->fd = sockfd;
@@ -253,7 +251,7 @@ int be_get_dns_result ( se_ptr_t *ptr )
                         lua_pop ( cok->L, -1 );
                     }
 
-                    return;
+                    return 0;
                 }
 
                 cok->reusedtimes = 0;
@@ -263,7 +261,7 @@ int be_get_dns_result ( se_ptr_t *ptr )
                 ret = connect ( cok->fd, ( struct sockaddr * ) &cok->addr,
                                 sizeof ( struct sockaddr ) );
                 cok->fd = sockfd;
-                cok->ptr = se_add ( epoll_fd, sockfd, cok );
+                cok->ptr = se_add ( loop_fd, sockfd, cok );
 
             } else {
                 ( ( se_ptr_t * ) cok->ptr )->data = cok;
@@ -331,7 +329,7 @@ int be_get_dns_result ( se_ptr_t *ptr )
                 }
             }
 
-            return;
+            return 0;
         }
 
         {
@@ -354,7 +352,7 @@ int be_get_dns_result ( se_ptr_t *ptr )
     return 0;
 }
 
-int do_dns_query ( int epoll_fd, cosocket_t *cok, const char *name )
+int do_dns_query ( int loop_fd, cosocket_t *cok, const char *name )
 {
     if ( dns_server_count == 0 ) { /// init dns servers
         int p1 = 0,
@@ -415,8 +413,6 @@ int do_dns_query ( int epoll_fd, cosocket_t *cok, const char *name )
     if ( ++dns_tid > 65535 - 1 ) {
         dns_tid = 1;
     }
-
-    struct epoll_event ev;
 
     cok->dns_query_fd = socket ( PF_INET, SOCK_DGRAM, 17 );
 
@@ -480,9 +476,9 @@ int do_dns_query ( int epoll_fd, cosocket_t *cok, const char *name )
     *p++ = 1;           /* Query Type */
     *p++ = 0;
     *p++ = 1;           /* Class: inet, 0x0001 */
-    n = p - pkt;        /* Total packet length */
+    n = ( unsigned char * ) p - pkt;    /* Total packet length */
 
-    cok->ptr = se_add ( epoll_fd, cok->dns_query_fd, cok );
+    cok->ptr = se_add ( loop_fd, cok->dns_query_fd, cok );
     se_be_read ( cok->ptr, be_get_dns_result );
 
     sendto (

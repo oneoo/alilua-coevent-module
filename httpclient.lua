@@ -3,7 +3,6 @@ local os = os
 local table = table
 local pairs = pairs
 local ipairs = ipairs
-local rawset = rawset
 local math = math
 local type = type
 local tonumber = tonumber
@@ -13,6 +12,8 @@ local cosocket = cosocket
 local ngx = ngx
 local tcp
 local base64_encode = base64_encode
+local insert=table.insert
+local concat=table.concat
 
 if ngx and ngx.say then
 	tcp = ngx.socket.tcp
@@ -34,6 +35,7 @@ module(...)
 _VERSION = '0.1'
 
 local function httprequest(url, params)
+	if not params then params = {} end
 	local chunk, protocol = url:match('^(([a-z0-9+]+)://)')
 	url = url:sub((chunk and #chunk or 0) + 1)
 
@@ -41,6 +43,8 @@ local function httprequest(url, params)
 	if not sock then
 		return nil, err
 	end
+	
+	if not params.pool_size then params.pool_size = 0 end
 	if params.pool_size then
 		if ngx then
 			sock:setkeepalive(60, params.pool_size)
@@ -113,24 +117,24 @@ local function httprequest(url, params)
 			if not is_multipart then
 				is_post = true
 				for k,v in pairs(params.data) do
-					rawset(contents, i, k..'='..tostring(v))
+					contents[i] = k..'='..tostring(v)
 					i = i+1
 				end
-				contents = table.concat(contents, '&')
+				contents = concat(contents, '&')
 			else
 				boundary = '--'..base64_encode(os.time()..math.random()):sub(1,16)
 				for k,v in pairs(params.data) do
 					if type(v) == 'string' then
-						rawset(contents, i, 'Content-Disposition: form-data; name="'..k..'"\r\n\r\n'..v)
+						contents[i] = 'Content-Disposition: form-data; name="'..k..'"\r\n\r\n'..v
 					else
 						if not v.name then v.name = '' end
-						rawset(contents, i, 'Content-Disposition: form-data; name="'..k..'"; filename="'..v.name..
+						contents[i] = 'Content-Disposition: form-data; name="'..k..'"; filename="'..v.name..
 						'"\r\nContent-Type: '..(v.type and v.type or 'application/octet-stream')..';\r\n\r\n'..
-						(type(v.file)=='string' and v.file or ''))
+						(type(v.file)=='string' and v.file or '')
 					end
 					i = i+1
 				end
-				contents = '--'..boundary..'\r\n'..table.concat(contents, '\r\n--'..boundary..'\r\n')..'\r\n--'..boundary..'--'
+				contents = '--'..boundary..'\r\n'..concat(contents, '\r\n--'..boundary..'\r\n')..'\r\n--'..boundary..'--'
 			end
 		else
 			contents = params.data
@@ -143,33 +147,33 @@ local function httprequest(url, params)
 							'Accept: */*',
 							}
 	if zlib then
-		table.insert(request_headers, 'Accept-Encoding: gzip,deflate')
+		insert(request_headers, 'Accept-Encoding: gzip,deflate')
 	end
 	if user and pw then
-		table.insert(request_headers, 'Authorization: Basic ' .. base64_encode(user..':'..pw))
+		insert(request_headers, 'Authorization: Basic ' .. base64_encode(user..':'..pw))
 	end
 	if params.header then
 		if type(params.header) == 'table' then
 			local k,v
 			for k,v in ipairs(params.header) do
-				table.insert(request_headers, v)
+				insert(request_headers, v)
 			end
 		else
-			table.insert(request_headers, tostring(params.header))
+			insert(request_headers, tostring(params.header))
 		end
 	end
 	if contents then
 		if is_post then
-			table.insert(request_headers, 'Content-Type: application/x-www-form-urlencoded')
+			insert(request_headers, 'Content-Type: application/x-www-form-urlencoded')
 		elseif is_multipart then
-			table.insert(request_headers, 'Content-Type: multipart/form-data; boundary='..boundary)
+			insert(request_headers, 'Content-Type: multipart/form-data; boundary='..boundary)
 		end
-		table.insert(request_headers, 'Content-Length: '..#contents+send_file_length_sum)
+		insert(request_headers, 'Content-Length: '..#contents+send_file_length_sum)
 	end
 	
 	--send request
-	local bytes, err = sock:send(table.concat(request_headers, '\r\n')..'\r\n\r\n')
-	--print(table.concat(request_headers, '\r\n')..'\r\n\r\n')
+	local bytes, err = sock:send(concat(request_headers, '\r\n')..'\r\n\r\n')
+	--print(concat(request_headers, '\r\n')..'\r\n\r\n')
 	if err then
 		sock:close()
 		return nil, err
@@ -272,7 +276,7 @@ local function httprequest(url, params)
 				deflated = true
 			end
 		end
-		rawset(headers, i, line)
+		headers[i] = line
 		i = i+1
 		line,err = sock:receive('*l')
 	end
@@ -294,18 +298,27 @@ local function httprequest(url, params)
 			local read_length = tonumber(line, 16)
 			if read_length == 0 then rterr = nil break end
 			if not read_length or read_length < 1 then break end
-			buf,err = sock:receive(read_length)
-			if buf then
-				rawset(bodys, i, buf)
-				i = i+1
+			
+			while read_length > 0 do
+				local rl = read_length
+				if rl > 4096 then rl = 4096 end
+				read_length = read_length - rl
+				buf,err = sock:receive(rl)
+				if buf then
+					bodys[i] = buf
+					i = i+1
+				else
+					break
+				end
 			end
+			
 			line,err = sock:receive('*l')
 		end
 	else
 		local buf,err = sock:receive('*a')
 		i = 1
 		while not err do
-			rawset(bodys, i, buf)
+			bodys[i] = buf
 			--print(buf)
 			i = i+1
 			
@@ -337,11 +350,11 @@ local function httprequest(url, params)
 			bodys = stream:read('*a')
 			stream:close()
 		elseif deflated then
-			bodys = zlib.decompress(table.concat(bodys),-8)
+			bodys = zlib.decompress(concat(bodys),-8)
 		end
 	end
 	
-	if type(bodys) == 'table' then bodys = table.concat(bodys) end
+	if type(bodys) == 'table' then bodys = concat(bodys) end
 	
 	return bodys, headers, rterr
 end
