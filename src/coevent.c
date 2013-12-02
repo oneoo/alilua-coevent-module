@@ -342,7 +342,7 @@ static int lua_co_connect ( lua_State *L )
     return lua_yield ( L, 0 );
 }
 
-static int cosocket_be_write ( se_ptr_t *ptr )
+int cosocket_be_write ( se_ptr_t *ptr )
 {
     io_counts++;
     cosocket_t *cok = ptr->data;
@@ -499,7 +499,7 @@ static int lua_co_send ( lua_State *L )
     return lua_yield ( L, 0 );
 }
 
-static int cosocket_be_read ( se_ptr_t *ptr )
+int cosocket_be_read ( se_ptr_t *ptr )
 {
     io_counts++;
     cosocket_t *cok = ptr->data;

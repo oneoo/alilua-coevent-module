@@ -143,6 +143,12 @@ int get_dns_cache ( const char *name, struct in_addr *addr );
 void add_dns_cache ( const char *name, struct in_addr addr, int do_recache );
 int do_dns_query ( int loop_fd, cosocket_t *cok, const char *name );
 
+int cosocket_be_connected ( se_ptr_t *ptr );
+int cosocket_be_ssl_connected ( se_ptr_t *ptr );
+int be_get_dns_result ( se_ptr_t *ptr );
+int cosocket_be_write ( se_ptr_t *ptr );
+int cosocket_be_read ( se_ptr_t *ptr );
+
 
 long longtime();
 

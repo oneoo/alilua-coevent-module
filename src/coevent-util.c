@@ -1,6 +1,7 @@
 #include "coevent.h"
 #include "connection-pool.h"
 
+static char tbuf_4096[4096] = {};
 long longtime()
 {
     struct timeb t;
@@ -279,6 +280,39 @@ int chk_do_timeout_link ( int loop_fd )
 
                 //printf("fd timeout %d %d %ld\n", cok->fd,cok->dns_query_fd, _tl->timeout);
 
+                lua_pushnil ( cok->L );
+
+                if ( cok->ptr ) {
+                    if ( ( ( se_ptr_t * ) cok->ptr )->func == be_get_dns_result ) {
+                        lua_pushstring ( cok->L, "dns lookup timeout!" );
+                    }
+
+                    else if ( ( ( se_ptr_t * ) cok->ptr )->func == cosocket_be_connected ) {
+                        sprintf ( tbuf_4096, "connect to %s timeout!", inet_ntoa ( cok->addr.sin_addr ) );
+                        //lua_pushstring ( cok->L, "connect timeout!" );
+                        lua_pushstring ( cok->L, tbuf_4096 );
+                    }
+
+                    else if ( ( ( se_ptr_t * ) cok->ptr )->func == cosocket_be_ssl_connected ) {
+                        lua_pushstring ( cok->L, "connect timeout!" );
+                    }
+
+                    else if ( ( ( se_ptr_t * ) cok->ptr )->func == cosocket_be_write ) {
+                        lua_pushstring ( cok->L, "send timeout!" );
+                    }
+
+                    else if ( ( ( se_ptr_t * ) cok->ptr )->func == cosocket_be_read ) {
+                        lua_pushstring ( cok->L, "read timeout!" );
+                    }
+
+                    else {
+                        lua_pushstring ( cok->L, "timeout!" );
+                    }
+
+                } else {
+                    lua_pushstring ( cok->L, "timeout!" );
+                }
+
                 if ( cok->dns_query_fd > -1 ) {
                     se_delete ( cok->ptr );
                     cok->ptr = NULL;
@@ -302,8 +336,6 @@ int chk_do_timeout_link ( int loop_fd )
                     cok->ssl = NULL;
                 }
 
-                lua_pushnil ( cok->L );
-                lua_pushstring ( cok->L, "timeout!" );
                 cok->inuse = 0;
 
                 lua_co_resume ( cok->L, 2 );

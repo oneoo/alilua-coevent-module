@@ -128,6 +128,7 @@ int be_get_dns_result ( se_ptr_t *ptr )
 
     while ( ( len = recvfrom ( cok->dns_query_fd, pkt, 2048, 0, NULL, NULL ) ) > 0
             && len >= sizeof ( dns_query_header_t ) ) {
+        int _dns_query_fd = cok->dns_query_fd;
         cok->dns_query_fd = -1;
         int fd = ptr->fd;
         se_delete ( ptr );
@@ -211,7 +212,8 @@ int be_get_dns_result ( se_ptr_t *ptr )
         }
 
         if ( found > 0 ) {
-            cok->addr.sin_addr = ips[cok->dns_query_fd % found];
+            cok->addr.sin_addr = ips[_dns_query_fd % found];
+
             int sockfd = -1;
 
             add_dns_cache ( cok->dns_query_name, cok->addr.sin_addr, 0 );
