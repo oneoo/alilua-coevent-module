@@ -118,6 +118,7 @@ int cosocket_be_connected ( se_ptr_t *ptr )
                 cok->status = 0;
 
                 SSL_CTX_free ( cok->ctx );
+                cok->ctx = NULL;
 
                 lua_pushnil ( cok->L );
                 lua_pushstring ( cok->L, "ssl error: no context" );
@@ -305,6 +306,7 @@ static int lua_co_connect ( lua_State *L )
                     cok->status = 0;
 
                     SSL_CTX_free ( cok->ctx );
+                    cok->ctx = NULL;
 
                     lua_pushnil ( cok->L );
                     lua_pushstring ( cok->L, "ssl error: no context" );
@@ -907,13 +909,6 @@ static int lua_co_gc ( lua_State *L )
     cosocket_t *cok = ( cosocket_t * ) lua_touserdata ( L, 1 );
     _lua_co_close ( L, cok );
 
-    if ( cok->ssl ) {
-        SSL_CTX_free ( cok->ctx );
-        cok->ctx = NULL;
-        SSL_free ( cok->ssl );
-        cok->ssl = NULL;
-    }
-
     return 0;
 }
 
@@ -957,6 +952,8 @@ int lua_co_setkeepalive ( lua_State *L )
         const char *key = lua_tolstring ( L, 3, &len );
         cok->pool_key = fnv1a_32 ( key, len );
     }
+
+    _lua_co_close ( L, cok );
 
     lua_pushboolean ( L, 1 );
     return 1;
