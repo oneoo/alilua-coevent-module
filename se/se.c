@@ -2,6 +2,10 @@
 
 #ifdef linux
 #include <sys/epoll.h>
+#ifndef EPOLLRDHUP
+#define EPOLLRDHUP 0x2000
+#endif
+
 static struct epoll_event events[SE_SIZE], ev;
 
 int se_create ( int event_size )
