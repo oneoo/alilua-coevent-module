@@ -1,6 +1,3 @@
 [submodule "merry"]
 	path = merry
 	url = https://github.com/oneoo/merry.git
-[submodule "luajit"]
-	path = luajit
-	url = https://github.com/agentzh/luajit2.git
