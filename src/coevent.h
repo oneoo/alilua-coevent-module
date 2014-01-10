@@ -16,38 +16,22 @@
 #include <inttypes.h>
 #include <zlib.h>
 #include <errno.h>
-#include <openssl/sha.h>
+//#include <openssl/sha.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
 #include <lua.h>
 #include <lauxlib.h>
 
-#include "../se/se.h"
+#include "../merry/merry.h"
 
-#define free(p) do { if (p) { free(p); p = NULL; } } while (0)
-#define close(fd) do { if (fd >= 0) { close(fd); fd = -1; } } while (0)
+//#define free(p) do { if (p) { free(p); p = NULL; } } while (0)
+//#define close(fd) do { if (fd >= 0) { close(fd); fd = -1; } } while (0)
 
 #ifndef _COEVENT_H
 #define _COEVENT_H
 
 #define large_malloc(s) (malloc(((int)(s/4096)+1)*4096))
-#define A_C_R "\x1b[31m"
-#define A_C_G "\x1b[32m"
-#define A_C_Y "\x1b[33m"
-#define A_C_B "\x1b[34m"
-#define A_C_M "\x1b[35m"
-#define A_C_C "\x1b[36m"
-#define A_C__ "\x1b[0m"
-
-#define cr_printf(fmt, ...) printf("%s" fmt "%s", A_C_R, ##__VA_ARGS__, A_C__)
-#define cg_printf(fmt, ...) printf("%s" fmt "%s", A_C_G, ##__VA_ARGS__, A_C__)
-#define cy_printf(fmt, ...) printf("%s" fmt "%s", A_C_Y, ##__VA_ARGS__, A_C__)
-#define cb_printf(fmt, ...) printf("%s" fmt "%s", A_C_B, ##__VA_ARGS__, A_C__)
-#define cm_printf(fmt, ...) printf("%s" fmt "%s", A_C_M, ##__VA_ARGS__, A_C__)
-#define cc_printf(fmt, ...) printf("%s" fmt "%s", A_C_C, ##__VA_ARGS__, A_C__)
-
-time_t timer;
 
 #ifndef u_char
 #define u_char unsigned char
@@ -66,14 +50,6 @@ typedef struct {
     int buf_len;
     char z[2]; /// size align
 } cosocket_link_buf_t;
-
-typedef struct {
-    uint32_t    key1;
-    uint32_t    key2;
-    struct in_addr addr;
-    int     recached;
-    void       *next;
-} dns_cache_item_t;
 
 #define _SENDBUF_SIZE 3857
 typedef struct {
@@ -101,9 +77,6 @@ typedef struct {
     size_t readed;
 
     int timeout;
-    int dns_tid;
-    int dns_query_fd;
-    char dns_query_name[60];// with size align / 60
     struct sockaddr_in addr;
     int pool_size;
     unsigned long pool_key;
@@ -119,57 +92,39 @@ typedef struct {
     long timeout;
 } timeout_link_t;
 
-typedef struct {
-    uint16_t    tid;            /* Transaction ID */
-    uint16_t    flags;          /* Flags */
-    uint16_t    nqueries;       /* Questions */
-    uint16_t    nanswers;       /* Answers */
-    uint16_t    nauth;          /* Authority PRs */
-    uint16_t    nother;         /* Other PRs */
-    unsigned char   data[1];    /* Data, variable length */
-} dns_query_header_t;
+int lua_co_resume(lua_State *L , int args);
+int cosocket_be_ssl_connected(se_ptr_t *ptr);
+int add_to_timeout_link(cosocket_t *cok, int timeout);
+int del_in_timeout_link(cosocket_t *cok);
+int lua_f_coroutine_resume_waiting(lua_State *L);
+int chk_do_timeout_link(int loop_fd);
 
-#define NULL32 NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
-int lua_co_resume ( lua_State *L , int args );
-int cosocket_be_ssl_connected ( se_ptr_t *ptr );
-int cosocket_be_connected ( se_ptr_t *ptr );
-int coevent_setblocking ( int fd, int blocking );
-int add_to_timeout_link ( cosocket_t *cok, int timeout );
-int del_in_timeout_link ( cosocket_t *cok );
-int lua_f_coroutine_resume_waiting ( lua_State *L );
-int chk_do_timeout_link ( int loop_fd );
+int cosocket_be_write(se_ptr_t *ptr);
+int cosocket_be_read(se_ptr_t *ptr);
 
-int get_dns_cache ( const char *name, struct in_addr *addr );
-void add_dns_cache ( const char *name, struct in_addr addr, int do_recache );
-int do_dns_query ( int loop_fd, cosocket_t *cok, const char *name );
+int tcp_connect(const char *host, int port, cosocket_t *cok, int loop_fd, int *ret);
+int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size,
+                           se_ptr_t *ptr, void *ssl, void *ctx);
 
-int cosocket_be_connected ( se_ptr_t *ptr );
-int cosocket_be_ssl_connected ( se_ptr_t *ptr );
-int be_get_dns_result ( se_ptr_t *ptr );
-int cosocket_be_write ( se_ptr_t *ptr );
-int cosocket_be_read ( se_ptr_t *ptr );
+int lua_f_time(lua_State *L);
+int lua_f_longtime(lua_State *L);
+size_t lua_calc_strlen_in_table(lua_State *L, int index, int arg_i, unsigned strict);
+unsigned char *lua_copy_str_in_table(lua_State *L, int index, u_char *dst);
 
+int lua_f_md5(lua_State *L);
+int lua_f_sha1bin(lua_State *L);
+int lua_f_hmac_sha1(lua_State *L);
 
-long longtime();
+int lua_f_base64_encode(lua_State *L);
+int lua_f_base64_decode(lua_State *L);
 
-int tcp_connect ( const char *host, int port, cosocket_t *cok, int loop_fd, int *ret );
-int add_connection_to_pool ( int loop_fd, unsigned long pool_key, int pool_size,
-                             se_ptr_t *ptr, void *ssl, void *ctx );
+int cosocket_lua_f_escape(lua_State *L);
+int lua_f_escape_uri(lua_State *L);
+int lua_f_unescape_uri(lua_State *L);
 
-int lua_f_time ( lua_State *L );
-int lua_f_longtime ( lua_State *L );
-size_t lua_calc_strlen_in_table ( lua_State *L, int index, int arg_i, unsigned strict );
-unsigned char *lua_copy_str_in_table ( lua_State *L, int index, u_char *dst );
+int lua_f_log(lua_State *L);
+int lua_f_open_log(lua_State *L);
 
-int lua_f_sha1bin ( lua_State *L );
-
-int lua_f_base64_encode ( lua_State *L );
-int lua_f_base64_decode ( lua_State *L );
-
-int cosocket_lua_f_escape ( lua_State *L );
-int lua_f_escape_uri ( lua_State *L );
-int lua_f_unescape_uri ( lua_State *L );
-
-uint32_t fnv1a_32 ( const unsigned char *data, uint32_t len );
-uint32_t fnv1a_64 ( const unsigned char *data, uint32_t len );
+uint32_t fnv1a_32(const unsigned char *data, uint32_t len);
+uint32_t fnv1a_64(const unsigned char *data, uint32_t len);
 #endif

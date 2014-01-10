@@ -1,7 +1,7 @@
 MODNAME= coevent
 CC = gcc
 OPTIMIZATION = -O3
-CFLAGS = -lssl -lcrypto -lm
+CFLAGS = -lssl -lcrypto -lm -lpthread
 
 ifeq ($(LUAJIT),)
 ifeq ($(LUA),)
@@ -18,7 +18,9 @@ all:$(MODNAME).o
 
 $(MODNAME).o:
 	[ -d objs ] || mkdir objs;
-	cd objs && $(CC) -g -fPIC -c ../se/*.c;
+	cd objs && $(CC) -g -fPIC -c ../merry/common/*.c;
+	cd objs && $(CC) -g -fPIC -c ../merry/se/*.c;
+	cd objs && $(CC) -g -fPIC -c ../merry/*.c;
 	cd objs && $(CC) -g -fPIC -c ../src/*.c;
 	`cd ../` && $(CC) -g objs/*.o -o $(MODNAME).so -shared $(CFLAGS) $(LIBLUA)
 

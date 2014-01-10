@@ -45,13 +45,7 @@ local function httprequest(url, params)
 	end
 	
 	if not params.pool_size then params.pool_size = 0 end
-	if params.pool_size then
-		if ngx then
-			sock:setkeepalive(60, params.pool_size)
-		else
-			sock:setkeepalive(params.pool_size)
-		end
-	end
+
 	if params.timeout then
 		sock:settimeout(params.timeout/(ngx and 1 or 1000))
 	end
@@ -86,7 +80,7 @@ local function httprequest(url, params)
 	if not uri or uri =='' then uri = '/' end
 	
 	-- connect to server
-	local ok, err = sock:connect(hostname, port)
+	local ok, err = ngx and sock:connect(hostname, port) or sock:connect(hostname, port, params.pool_size)
 	if not ok then
 		return nil, err
 	end
@@ -336,7 +330,15 @@ local function httprequest(url, params)
 		end
 	end
 	
-	sock:close()
+	if params.pool_size then
+		if ngx then
+			sock:setkeepalive(60, params.pool_size)
+		else
+			sock:setkeepalive(params.pool_size)
+		end
+	else
+		sock:close()
+	end
 	
 	if zlib then
 		if gziped then

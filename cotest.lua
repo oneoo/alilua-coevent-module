@@ -25,25 +25,6 @@ function test_mysql()
 	end
 	print('---------------------------------------mysql connected')
 	
-	--local t = newthread(test_http_client, 200, 'www.163.com', '/')
-	local tt = newthread(test_http_client, 300, 'www.163.com', '/rss/')
-print('used:'..((longtime()-st)/1000))
-	for n=1,1 do
-		local bytes, err = db:send_query("select * from t1;")
-		if not bytes then
-			print("failed to send query: ", err)
-		end
-		
-		print('used:'..((longtime()-st)/1000))
-		local res, err, errno, sqlstate = db:read_result()
-		if not res then
-			print("bad result: ", err, ": ", errno, ": ", sqlstate, ".")
-		end
-		print('used:'..((longtime()-st)/1000))
-		print(n, "result: ", cjson.encode(res))
-	end
-	
-	
 	local res, err, errno, sqlstate =
 		db:query("drop table if exists cats")
 	if not res then
@@ -90,8 +71,6 @@ print('used:'..((longtime()-st)/1000))
     print('--------------------------')
 	
 	print('test_mysql be end  used:'..((longtime()-st)/1000));
-	coroutine_wait(t)
-	coroutine_wait(tt)
 	
 	db:close()
 
@@ -104,6 +83,7 @@ function test_memcached()
 		print("failed to connect: ", err)
 		return
 	end
+	print('---------------------------------------memcached connected')
 
 	local ok, err = memc:flush_all()
 	if not ok then
@@ -149,6 +129,7 @@ function test_redis()
 		print("failed to connect: ", err)
 		return
 	end
+	print('---------------------------------------redis connected')
 
 	local res, err = red:hmset("animals", "dog", "bark", "cat", "meow")
 	if not res then

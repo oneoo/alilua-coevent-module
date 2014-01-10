@@ -1,20 +1,20 @@
 #include "coevent.h"
 
-int lua_f_time ( lua_State *L )
+int lua_f_time(lua_State *L)
 {
-    lua_pushnumber ( L, time ( NULL ) );
+    lua_pushnumber(L, time(NULL));
     return 1;
 }
 
-int lua_f_longtime ( lua_State *L )
+int lua_f_longtime(lua_State *L)
 {
     struct timeb t;
-    ftime ( &t );
-    lua_pushnumber ( L, 1000 * t.time + t.millitm );
+    ftime(&t);
+    lua_pushnumber(L, 1000 * t.time + t.millitm);
     return 1;
 }
 
-size_t lua_calc_strlen_in_table ( lua_State *L, int index, int arg_i, unsigned strict )
+size_t lua_calc_strlen_in_table(lua_State *L, int index, int arg_i, unsigned strict)
 {
     double key = 0;
     int max = 0;
@@ -24,29 +24,29 @@ size_t lua_calc_strlen_in_table ( lua_State *L, int index, int arg_i, unsigned s
     size_t len = 0;
     const char *msg = NULL;
 
-    if ( index < 0 ) {
-        index = lua_gettop ( L ) + index + 1;
+    if(index < 0) {
+        index = lua_gettop(L) + index + 1;
     }
 
     max = 0;
-    lua_pushnil ( L ); /* stack: table key */
+    lua_pushnil(L);    /* stack: table key */
 
-    while ( lua_next ( L, index ) != 0 ) { /* stack: table key value */
-        if ( lua_type ( L, -2 ) == LUA_TNUMBER ) {
-            key = lua_tonumber ( L, -2 );
+    while(lua_next(L, index) != 0) {       /* stack: table key value */
+        if(lua_type(L, -2) == LUA_TNUMBER) {
+            key = lua_tonumber(L, -2);
 
-            if ( floor ( key ) == key && key >= 1 ) {
-                if ( key > max ) {
+            if(floor(key) == key && key >= 1) {
+                if(key > max) {
                     max = key;
                 }
 
-                lua_pop ( L, 1 ); /* stack: table key */
+                lua_pop(L, 1);    /* stack: table key */
                 continue;
             }
         }
 
         /* not an array (non positive integer key) */
-        lua_pop ( L, 2 ); /* stack: table */
+        lua_pop(L, 2);    /* stack: table */
         //msg = lua_pushfstring(L, "non-array table found"); /// commented by oneoo
         //luaL_argerror(L, arg_i, msg);
         return 0;
@@ -54,50 +54,50 @@ size_t lua_calc_strlen_in_table ( lua_State *L, int index, int arg_i, unsigned s
 
     size = 0;
 
-    for ( i = 1; i <= max; i++ ) {
-        lua_rawgeti ( L, index, i ); /* stack: table value */
-        type = lua_type ( L, -1 );
+    for(i = 1; i <= max; i++) {
+        lua_rawgeti(L, index, i);    /* stack: table value */
+        type = lua_type(L, -1);
 
-        switch ( type ) {
+        switch(type) {
             case LUA_TNUMBER:
             case LUA_TSTRING:
-                lua_tolstring ( L, -1, &len );
+                lua_tolstring(L, -1, &len);
                 size += len;
                 break;
 
             case LUA_TNIL:
-                if ( strict ) {
+                if(strict) {
                     goto bad_type;
                 }
 
-                size += sizeof ( "nil" ) - 1;
+                size += sizeof("nil") - 1;
                 break;
 
             case LUA_TBOOLEAN:
-                if ( strict ) {
+                if(strict) {
                     goto bad_type;
                 }
 
-                if ( lua_toboolean ( L, -1 ) ) {
-                    size += sizeof ( "true" ) - 1;
+                if(lua_toboolean(L, -1)) {
+                    size += sizeof("true") - 1;
 
                 } else {
-                    size += sizeof ( "false" ) - 1;
+                    size += sizeof("false") - 1;
                 }
 
                 break;
 
             case LUA_TTABLE:
-                size += lua_calc_strlen_in_table ( L, -1, arg_i, strict );
+                size += lua_calc_strlen_in_table(L, -1, arg_i, strict);
                 break;
 
             case LUA_TLIGHTUSERDATA:
-                if ( strict ) {
+                if(strict) {
                     goto bad_type;
                 }
 
-                if ( lua_touserdata ( L, -1 ) == NULL ) {
-                    size += sizeof ( "null" ) - 1;
+                if(lua_touserdata(L, -1) == NULL) {
+                    size += sizeof("null") - 1;
                     break;
                 }
 
@@ -105,17 +105,17 @@ size_t lua_calc_strlen_in_table ( lua_State *L, int index, int arg_i, unsigned s
 
             default:
 bad_type:
-                msg = lua_pushfstring ( L, "bad data type %s found", lua_typename ( L, type ) );
-                return luaL_argerror ( L, arg_i, msg );
+                msg = lua_pushfstring(L, "bad data type %s found", lua_typename(L, type));
+                return luaL_argerror(L, arg_i, msg);
         }
 
-        lua_pop ( L, 1 ); /* stack: table */
+        lua_pop(L, 1);    /* stack: table */
     }
 
     return size;
 }
 
-unsigned char *lua_copy_str_in_table ( lua_State *L, int index, u_char *dst )
+unsigned char *lua_copy_str_in_table(lua_State *L, int index, u_char *dst)
 {
     double key = 0;
     int max = 0;
@@ -124,32 +124,32 @@ unsigned char *lua_copy_str_in_table ( lua_State *L, int index, u_char *dst )
     size_t len = 0;
     const u_char *p = NULL;
 
-    if ( index < 0 ) {
-        index = lua_gettop ( L ) + index + 1;
+    if(index < 0) {
+        index = lua_gettop(L) + index + 1;
     }
 
     max = 0;
-    lua_pushnil ( L ); /* stack: table key */
+    lua_pushnil(L);    /* stack: table key */
 
-    while ( lua_next ( L, index ) != 0 ) { /* stack: table key value */
-        key = lua_tonumber ( L, -2 );
+    while(lua_next(L, index) != 0) {       /* stack: table key value */
+        key = lua_tonumber(L, -2);
 
-        if ( key > max ) {
+        if(key > max) {
             max = key;
         }
 
-        lua_pop ( L, 1 ); /* stack: table key */
+        lua_pop(L, 1);    /* stack: table key */
     }
 
-    for ( i = 1; i <= max; i++ ) {
-        lua_rawgeti ( L, index, i ); /* stack: table value */
-        type = lua_type ( L, -1 );
+    for(i = 1; i <= max; i++) {
+        lua_rawgeti(L, index, i);    /* stack: table value */
+        type = lua_type(L, -1);
 
-        switch ( type ) {
+        switch(type) {
             case LUA_TNUMBER:
             case LUA_TSTRING:
-                p = ( u_char * ) lua_tolstring ( L, -1, &len );
-                memcpy ( dst, p, len );
+                p = (u_char *) lua_tolstring(L, -1, &len);
+                memcpy(dst, p, len);
                 dst += len;
                 break;
 
@@ -160,7 +160,7 @@ unsigned char *lua_copy_str_in_table ( lua_State *L, int index, u_char *dst )
                 break;
 
             case LUA_TBOOLEAN:
-                if ( lua_toboolean ( L, -1 ) ) {
+                if(lua_toboolean(L, -1)) {
                     *dst++ = 't';
                     *dst++ = 'r';
                     *dst++ = 'u';
@@ -177,7 +177,7 @@ unsigned char *lua_copy_str_in_table ( lua_State *L, int index, u_char *dst )
                 break;
 
             case LUA_TTABLE:
-                dst = lua_copy_str_in_table ( L, -1, dst );
+                dst = lua_copy_str_in_table(L, -1, dst);
                 break;
 
             case LUA_TLIGHTUSERDATA:
@@ -188,11 +188,11 @@ unsigned char *lua_copy_str_in_table ( lua_State *L, int index, u_char *dst )
                 break;
 
             default:
-                luaL_error ( L, "impossible to reach here" );
+                luaL_error(L, "impossible to reach here");
                 return NULL;
         }
 
-        lua_pop ( L, 1 ); /* stack: table */
+        lua_pop(L, 1);    /* stack: table */
     }
 
     return dst;
@@ -200,44 +200,44 @@ unsigned char *lua_copy_str_in_table ( lua_State *L, int index, u_char *dst )
 
 static char _1_temp_buf[4096];
 //Characters encoded are NUL (ASCII 0), \n, \r, \, ', ", and Control-Z.
-int cosocket_lua_f_escape ( lua_State *L )
+int cosocket_lua_f_escape(lua_State *L)
 {
     const char *src = NULL;
     size_t slen = 0;
 
-    if ( lua_isnil ( L, 1 ) ) {
+    if(lua_isnil(L, 1)) {
         src = "";
 
     } else {
-        src = luaL_checklstring ( L, 1, &slen );
+        src = luaL_checklstring(L, 1, &slen);
     }
 
-    if ( src == 0 ) {
-        lua_pushstring ( L, "" );
+    if(src == 0) {
+        lua_pushstring(L, "");
         return 1;
     }
 
     char *dst = _1_temp_buf;
 
-    if ( slen > 2048 ) {
-        dst = large_malloc ( slen * 2 );
+    if(slen > 2048) {
+        dst = large_malloc(slen * 2);
     }
 
     int i = 0, j = 0, has = 0;
 
-    for ( i = 0; i < slen; i++ ) {
-        if ( j >= 4 ) {
-            lua_pushlstring ( L, dst, j );
+    for(i = 0; i < slen; i++) {
+        if(j >= 4) {
+            lua_pushlstring(L, dst, j);
 
-            if ( has == 1 ) {
-                lua_concat ( L, 2 );
+            if(has == 1) {
+                lua_concat(L, 2);
             }
 
             has = 1;
             j = 0;
         }
 
-        switch ( src[i] ) {
+        switch(src[i]) {
             case '\r':
                 dst[j++] = '\\';
                 dst[j++] = 'r';
@@ -293,14 +293,14 @@ int cosocket_lua_f_escape ( lua_State *L )
         dst[j++] = src[i];
     }
 
-    lua_pushlstring ( L, dst, j );
+    lua_pushlstring(L, dst, j);
 
-    if ( dst != _1_temp_buf ) {
-        free ( dst );
+    if(dst != _1_temp_buf) {
+        free(dst);
     }
 
-    if ( has == 1 ) {
-        lua_concat ( L, 2 );
+    if(has == 1) {
+        lua_concat(L, 2);
     }
 
     return 1;
