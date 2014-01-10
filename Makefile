@@ -25,8 +25,10 @@ $(MODNAME).o:
 	`cd ../` && $(CC) -g objs/*.o -o $(MODNAME).so -shared $(CFLAGS) $(LIBLUA)
 
 install:
-	cd objs && $(CC) -O3 -fPIC -c ../se/*.c;
-	cd objs && $(CC) -O3 -fPIC -c ../src/*.c;
+	cd objs && $(CC) -g -fPIC -c ../merry/common/*.c;
+	cd objs && $(CC) -g -fPIC -c ../merry/se/*.c;
+	cd objs && $(CC) -g -fPIC -c ../merry/*.c;
+	cd objs && $(CC) -g -fPIC -c ../src/*.c;
 	`cd ../` && $(CC) -O3 objs/*.o -o $(MODNAME).so $(CFLAGS) $(LIBLUA)
 	install $(MODNAME).so $< `lua installpath.lua $(MODNAME)`
 
