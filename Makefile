@@ -17,6 +17,7 @@ all:$(MODNAME).o
 	$(CC) objs/*.o -o $(MODNAME).so -shared -fPIC $(CFLAGS) $(LIBLUA)
 
 $(MODNAME).o:
+	[ -f merry/merry.h ] || (git submodule init && git submodule update)
 	[ -d objs ] || mkdir objs;
 	cd objs && $(CC) -g -fPIC -c ../merry/common/*.c;
 	cd objs && $(CC) -g -fPIC -c ../merry/se/*.c;
