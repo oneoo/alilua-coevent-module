@@ -6,6 +6,7 @@ local escape_uri = escape_uri
 local unescape_uri = unescape_uri
 local match = string.match
 local tcp = cosocket.tcp
+if ngx then tcp = ngx.socket.tcp end
 local strlen = string.len
 local insert = table.insert
 local concat = table.concat

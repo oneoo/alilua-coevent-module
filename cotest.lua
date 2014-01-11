@@ -1,8 +1,9 @@
 local L = require('coevent')
-print('start')
-
 local mysql = require "mysql"
 local cjson = require "cjson"
+local httprequest = (require "httpclient").httprequest
+
+print('start')
 local db = mysql:new()
 
 local memcached = require "memcached"
@@ -253,5 +254,9 @@ end
 
 L(function()
 	coroutine_wait(newthread(test_mysql))
+
+	local r,h,e = httprequest('https://www.upyun.com/index.html') print(r,h,e)
+	--local r,h,e = httprequest('http://www.163.com/index.html') print(r,h,e)
+	if h then for k,v in pairs(h) do print(k,v) end end
 end)
 print('end')

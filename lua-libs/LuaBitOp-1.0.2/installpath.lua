@@ -4,10 +4,10 @@ if not arg or not arg[1] then
   io.write("Usage: lua installpath.lua modulename\n")
   os.exit(1)
 end
-
-for p in string.gmatch(arg[1]:find('.so',1,1) and package.cpath or package.path , "[^;]+") do
+for p in string.gmatch(package.cpath, "[^;]+") do
   if string.sub(p, 1, 1) ~= "." then
-    io.write(p:gsub(arg[1]:find('.so',1,1) and '?.so' or '?.lua' ,''), "\n")
+    local p2 = string.gsub(arg[1], "%.", string.sub(package.config, 1, 1))
+    io.write(string.gsub(p, "%?", p2), "\n")
     return
   end
 end

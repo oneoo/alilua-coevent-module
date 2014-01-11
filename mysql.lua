@@ -3,7 +3,7 @@
 
 local bit = require "bit"
 local sub = string.sub
-local tcp --= ngx.socket.tcp
+local tcp
 local strbyte = string.byte
 local strchar = string.char
 local strfind = string.find

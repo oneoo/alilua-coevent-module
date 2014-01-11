@@ -3,6 +3,7 @@
 
 local sub = string.sub
 local tcp = cosocket.tcp
+if ngx then tcp = ngx.socket.tcp end
 local insert = table.insert
 local concat = table.concat
 local len = string.len

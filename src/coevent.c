@@ -1129,7 +1129,7 @@ int luaopen_coevent(lua_State *L)
 {
     LM = L;
     _loop_fd = -1;
-
+    
     swop_top = malloc(sizeof(cosocket_swop_t));
     swop_top->next = NULL;
 

@@ -127,4 +127,5 @@ int lua_f_open_log(lua_State *L);
 
 uint32_t fnv1a_32(const unsigned char *data, uint32_t len);
 uint32_t fnv1a_64(const unsigned char *data, uint32_t len);
+
 #endif
