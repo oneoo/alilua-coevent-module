@@ -26,7 +26,7 @@ int lua_f_log(lua_State *L)
         _LOGF(level, buf, "%s", lua_tostring(L, gn));
     }
 
-    sync_logs();
+    sync_logs(LOGF_T);
     return 0;
 }
 
@@ -38,7 +38,7 @@ int lua_f_open_log(lua_State *L)
         return 2;
     }
 
-    int fd = open_log(lua_tostring(L, 1), 4096);
-    lua_pushboolean(L, fd != -1);
+    LOGF_T = open_log(lua_tostring(L, 1), 4096);
+    lua_pushboolean(L, LOGF_T?1:0);
     return 1;
 }
