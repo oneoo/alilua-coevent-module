@@ -13,6 +13,8 @@ else
 LIBLUA = -L$(LUAJIT) -lluajit-5.1
 endif
 
+INCLUDES=-I/usr/local/include -I/usr/local/include/luajit-2.0 -I/usr/local/include/luajit-2.1
+
 all:$(MODNAME).o
 	$(CC) objs/*.o -o $(MODNAME).so -shared -fPIC $(CFLAGS) $(LIBLUA)
 
@@ -22,7 +24,7 @@ $(MODNAME).o:
 	cd objs && $(CC) -g -fPIC -c ../merry/common/*.c;
 	cd objs && $(CC) -g -fPIC -c ../merry/se/*.c;
 	cd objs && $(CC) -g -fPIC -c ../merry/*.c;
-	cd objs && $(CC) -g -fPIC -c ../src/*.c;
+	cd objs && $(CC) -g -fPIC -c ../src/*.c $(INCLUDES);
 
 	[ -f bit.so ] || (cd lua-libs/LuaBitOp-1.0.2 && make LIBLUA="$(LIBLUA)" && cp bit.so ../../ && make clean);
 	[ -f cjson.so ] || (cd lua-libs/lua-cjson-2.1.0 && make LIBLUA="$(LIBLUA)" && cp cjson.so ../../ && make clean);

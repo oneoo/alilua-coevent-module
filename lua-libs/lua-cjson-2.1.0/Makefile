@@ -81,7 +81,7 @@ EXECPERM =          755
 
 ASCIIDOC =          asciidoc
 
-BUILD_CFLAGS =      -I$(LUA_INCLUDE_DIR) -I/usr/local/include -I/usr/local/include/luajit-2.0 $(CJSON_CFLAGS)
+BUILD_CFLAGS =      -I$(LUA_INCLUDE_DIR) -I/usr/local/include -I/usr/local/include/luajit-2.0 -I/usr/local/include/luajit-2.1 $(CJSON_CFLAGS)
 OBJS =              lua_cjson.o strbuf.o $(FPCONV_OBJS)
 
 .PHONY: all clean install install-extra doc
