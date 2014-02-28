@@ -17,9 +17,9 @@ PREFIX =            /usr/local
 #CFLAGS =            -g -Wall -pedantic -fno-inline
 CFLAGS =            -O3 -Wall -pedantic -DNDEBUG
 CJSON_CFLAGS =      -fpic
-CJSON_LDFLAGS =     -shared -llua
+CJSON_LDFLAGS =     -O3 -shared -llua
 ifneq (,$(findstring luajit,$(LIBLUA)))
-CJSON_LDFLAGS =     -shared -lluajit-5.1
+CJSON_LDFLAGS =     -O3 -shared -lluajit-5.1
 endif
 LUA_INCLUDE_DIR =   $(PREFIX)/include
 LUA_CMODULE_DIR =   $(PREFIX)/lib/lua/$(LUA_VERSION)

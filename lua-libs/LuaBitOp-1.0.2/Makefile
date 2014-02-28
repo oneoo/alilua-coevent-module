@@ -18,9 +18,9 @@ CCOPT= -O2 -fomit-frame-pointer
 CCWARN= -Wall
 SOCC= $(CC) -shared
 SOCFLAGS= -fPIC $(CCOPT) $(CCWARN) $(DEFINES) $(INCLUDES) $(CFLAGS)
-SOLDFLAGS= -fPIC $(LDFLAGS) -llua
+SOLDFLAGS= -O3 -fPIC $(LDFLAGS) -llua
 ifneq (,$(findstring luajit,$(LIBLUA)))
-SOLDFLAGS = -fPIC $(LDFLAGS) -lluajit-5.1
+SOLDFLAGS = -O3 -fPIC $(LDFLAGS) -lluajit-5.1
 endif
 RM= rm -f
 INSTALL= install -p

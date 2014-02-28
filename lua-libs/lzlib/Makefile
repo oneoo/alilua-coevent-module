@@ -14,8 +14,8 @@ LUABIN= $(LUA)/bin
 ZLIB=../zlib-1.2.3
 
 # no need to change anything below here
-CFLAGS= $(INCS) $(DEFS) $(WARN) -O0 -fPIC
-WARN= -g -Werror -Wall -pedantic #-ansi
+CFLAGS= $(INCS) $(DEFS) $(WARN) -O3 -fPIC
+WARN= -Werror -Wall -pedantic #-ansi
 INCS= -I$(LUAINC) -I/usr/local/include -I/usr/local/include/luajit-2.0 -I/usr/local/include/luajit-2.1 -I$(ZLIB)
 LIBS= -L$(ZLIB) -lz -L$(LUALIB) -L$(LUABIN) -llua
 

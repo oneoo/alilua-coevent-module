@@ -29,10 +29,12 @@ $(MODNAME).o:
 	[ -f bit.so ] || (cd lua-libs/LuaBitOp-1.0.2 && make LIBLUA="$(LIBLUA)" && cp bit.so ../../ && make clean);
 	[ -f cjson.so ] || (cd lua-libs/lua-cjson-2.1.0 && make LIBLUA="$(LIBLUA)" && cp cjson.so ../../ && make clean);
 	[ -f zlib.so ] || (cd lua-libs/lzlib && make LIBLUA="$(LIBLUA)" && cp zlib.so ../../ && make clean && rm -rf *.o);
+	[ -f llmdb.so ] || (cd lua-libs/lightningmdb && make LIBLUA="$(LIBLUA)" && cp llmdb.so ../../ && make clean && rm -rf *.o);
 
 install:
 	`cd objs` && $(CC) -O3 objs/*.o -o objs/$(MODNAME).so -shared $(CFLAGS) $(LIBLUA);
 	cp objs/*.so `lua installpath.lua .so`;
+	cp *.so `lua installpath.lua .so`;
 	cp mysql.lua `lua installpath.lua .lua`;
 	cp redis.lua `lua installpath.lua .lua`;
 	cp memcached.lua `lua installpath.lua .lua`;
