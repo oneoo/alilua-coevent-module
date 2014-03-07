@@ -4123,7 +4123,8 @@ mdb_env_open(MDB_env *env, const char *path, unsigned int flags, mdb_mode_t mode
 	if (rc)
 		goto leave;
 
-	env->me_path = strdup(path);
+	env->me_path = malloc(len+32);
+	strcpy(env->me_path, path);
 	env->me_dbxs = calloc(env->me_maxdbs, sizeof(MDB_dbx));
 	env->me_dbflags = calloc(env->me_maxdbs, sizeof(uint16_t));
 	if (!(env->me_dbxs && env->me_path && env->me_dbflags)) {
@@ -8172,7 +8173,10 @@ int mdb_dbi_open(MDB_txn *txn, const char *name, unsigned int flags, MDB_dbi *db
 	/* OK, got info, add to table */
 	if (rc == MDB_SUCCESS) {
 		unsigned int slot = unused ? unused : txn->mt_numdbs;
-		txn->mt_dbxs[slot].md_name.mv_data = strdup(name);
+		//txn->mt_dbxs[slot].md_name.mv_data = strdup(name);
+		txn->mt_dbxs[slot].md_name.mv_data = malloc(strlen(name)+32);
+		strcpy(txn->mt_dbxs[slot].md_name.mv_data, name);
+
 		txn->mt_dbxs[slot].md_name.mv_size = len;
 		txn->mt_dbxs[slot].md_rel = NULL;
 		txn->mt_dbflags[slot] = dbflag;
