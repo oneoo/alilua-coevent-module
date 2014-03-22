@@ -1,7 +1,7 @@
 MODNAME= llmdb
 CC = gcc
 OPTIMIZATION = -O3
-CFLAGS = -lm
+CFLAGS = -lm -lpthread
 
 ifeq ($(LUAJIT),)
 ifeq ($(LUA),)
