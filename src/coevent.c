@@ -916,22 +916,11 @@ static int lua_co_tcp(lua_State *L)
         cok->use_ssl = 0;
     }
 
-    cok->L = L;
-    cok->inuse = 0;
-    cok->ptr = NULL;
-    cok->fd = -1;
-    cok->status = 0;
-    cok->read_buf = NULL;
-    cok->send_buf_need_free = NULL;
-    cok->total_buf_len = 0;
-    cok->buf_read_len = 0;
-    cok->timeout = 30000;
-    cok->in_read_action = 0;
-    cok->pool_size = 0;
-    cok->pool_key = 0;
+    bzero(cok, sizeof(cosocket_t));
 
-    cok->ssl = NULL;
-    cok->ctx = NULL;
+    cok->L = L;
+    cok->fd = -1;
+    cok->timeout = 30000;
 
     if(luaL_newmetatable(L, "cosocket")) {
         /* Module table to be set as upvalue */
