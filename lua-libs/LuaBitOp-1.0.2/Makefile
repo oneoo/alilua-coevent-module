@@ -36,10 +36,10 @@ macosx:
 	$(MAKE) all "SOCC=MACOSX_DEPLOYMENT_TARGET=10.4 $(CC) -dynamiclib -single_module -undefined dynamic_lookup"
 
 $(MODNAME).o: $(MODNAME).c
-	$(CC) $(SOCFLAGS) -c -o $@ $<
+	$(CC) $(SOCFLAGS) -c -o $@ $(LIBLUA) $<
 
 $(MODSO): $(MODNAME).o
-	$(SOCC) $(SOLDFLAGS) -o $@ $<
+	$(SOCC) $(SOLDFLAGS) -o $@ $(LIBLUA) $<
 
 install: $(MODSO)
 	$(INSTALL) $< `$(INSTALLPATH) $(MODNAME)`

@@ -7,10 +7,10 @@ ifeq ($(LUAJIT),)
 ifeq ($(LUA),)
 LIBLUA = -llua -L/usr/lib
 else
-LIBLUA = -L$(LUA) -llua
+LIBLUA = -L$(LUA) -llua -Wl,-rpath,$(LUA) -I$(LUA)/../include
 endif
 else
-LIBLUA = -L$(LUAJIT) -lluajit-5.1
+LIBLUA = -L$(LUAJIT) -lluajit-5.1 -Wl,-rpath,$(LUAJIT) -I$(LUAJIT)/../include/luajit-2.0 -I$(LUAJIT)/../include/luajit-2.1
 endif
 
 INCLUDES=-I/usr/local/include -I/usr/local/include/luajit-2.0 -I/usr/local/include/luajit-2.1
