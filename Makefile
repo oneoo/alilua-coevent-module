@@ -16,7 +16,7 @@ endif
 INCLUDES=-I/usr/local/include -I/usr/local/include/luajit-2.0 -I/usr/local/include/luajit-2.1
 
 all:$(MODNAME).o
-	$(CC) objs/*.o -o $(MODNAME).so -shared -fPIC $(CFLAGS) $(LIBLUA)
+	$(CC) -o $(MODNAME).so -shared -fPIC $(CFLAGS) $(LIBLUA) objs/*.o
 
 $(MODNAME).o:
 	[ -f merry/merry.h ] || (git submodule init && git submodule update)

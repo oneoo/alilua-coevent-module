@@ -18,7 +18,7 @@ INCLUDES = -I$(LUAJIT)/../include/luajit-2.0 -I$(LUAJIT)/../include/luajit-2.1
 endif
 
 all:$(MODNAME).o
-	$(CC) *.o -o $(MODNAME).so $(OPTIMIZATION) -shared -fPIC $(CFLAGS) $(LIBLUA)
+	$(CC) -o $(MODNAME).so $(OPTIMIZATION) -shared -fPIC $(CFLAGS) $(LIBLUA) *.o
 
 $(MODNAME).o:
 	$(CC) -g -fPIC -c *.c $(INCLUDES) $(LIBLUA);

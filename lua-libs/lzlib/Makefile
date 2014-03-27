@@ -51,10 +51,7 @@ test: $(T_ZLIB) # $(T_GZIP)
 	$(LUABIN)/lua -lluarc test_zlib3.lua
 
 $(T_ZLIB): lzlib.o
-	$(CC) -o $@ -shared $< $(LIBS)
-
-$(T_GZIP): lgzip.o
-	$(CC) -o $@ -shared $< $(LIBS)
+	$(CC) -o $@ -shared $(LIBS) $<
 
 clean:
 	rm -f *.o *.so core core.* a.out
