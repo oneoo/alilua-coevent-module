@@ -20,7 +20,7 @@ SOCC= $(CC) -shared
 SOCFLAGS= -fPIC $(CCOPT) $(CCWARN) $(DEFINES) $(INCLUDES) $(CFLAGS)
 SOLDFLAGS= -O3 -fPIC $(LDFLAGS) -llua
 ifneq (,$(findstring luajit,$(LIBLUA)))
-SOLDFLAGS = -O3 -fPIC $(LDFLAGS) -lluajit-5.1
+SOLDFLAGS = -O3 -fPIC $(LDFLAGS)
 endif
 RM= rm -f
 INSTALL= install -p

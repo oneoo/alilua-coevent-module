@@ -22,7 +22,7 @@ INCS= -I$(LUAINC) -I/usr/local/include -I/usr/local/include/luajit-2.0 -I/usr/lo
 LIBS= -L$(ZLIB) -lz $(LIBLUA) -llua
 
 ifneq (,$(findstring luajit,$(LIBLUA)))
-LIBS= -L$(ZLIB) -lz $(LIBLUA) -lluajit-5.1
+LIBS= -L$(ZLIB) -lz $(LIBLUA)
 endif
 
 MYLIB=lzlib
