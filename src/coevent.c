@@ -188,12 +188,14 @@ static int lua_co_connect(lua_State *L)
             pn = 4;
         }
 
-        if(lua_gettop(L) >= pn) {       /// set keepalive options
+        if(lua_gettop(L) >= pn) { /// set keepalive options
             if(lua_isnumber(L, pn)) {
                 cok->pool_size = lua_tonumber(L, pn);
 
-                if(cok->pool_size < 0 || cok->pool_size > 1000) {
+                if(cok->pool_size < 0) {
                     cok->pool_size = 0;
+                }else if(cok->pool_size > 1000){
+                    cok->pool_size = 1000;
                 }
 
                 pn++;
@@ -851,8 +853,10 @@ int lua_co_setkeepalive(lua_State *L)
     cosocket_t *cok = (cosocket_t *) lua_touserdata(L, 1);
     cok->pool_size = lua_tonumber(L, 2);
 
-    if(cok->pool_size < 0 || cok->pool_size > 1000) {
+    if(cok->pool_size < 0) {
         cok->pool_size = 0;
+    }else if(cok->pool_size > 1000){
+        cok->pool_size = 1000;
     }
 
     if(lua_gettop(L) == 3 && lua_isstring(L, 3)) {
