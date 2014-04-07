@@ -163,7 +163,7 @@ static int lua_co_connect(lua_State *L)
             return 2;
         }
 
-//printf(" 0x%p connect to %s\n", L, lua_tostring(L, 2));
+        //printf(" 0x%p connect to %s\n", L, lua_tostring(L, 2));
         size_t host_len = 0;
         const char *host = lua_tolstring(L, 2, &host_len);
 
@@ -225,9 +225,7 @@ static int lua_co_connect(lua_State *L)
 
         /// check pool count
         if(cok->pool_size > 0) {
-            cosocket_connection_pool_counter_t *pool_counter = get_connection_pool_counter(cok->pool_key);
             cok->ptr = get_connection_in_pool(_loop_fd, cok->pool_key, cok);
-            //printf("try %d %d %ld\n", pool_counter->count , cok->pool_size / _process_count, cok->pool_key);
 
             if(cok->ptr) {
                 ((se_ptr_t *) cok->ptr)->data = cok;
@@ -240,6 +238,8 @@ static int lua_co_connect(lua_State *L)
 
                 return 1;
             }
+
+            cosocket_connection_pool_counter_t *pool_counter = get_connection_pool_counter(cok->pool_key);
 
             if(pool_counter->count >= cok->pool_size / _process_count) {
                 /// pool full
@@ -909,9 +909,15 @@ static const luaL_reg M[] = {
 
 static int lua_co_tcp(lua_State *L)
 {
-    cosocket_t *cok = NULL;
+    cosocket_t *cok = (cosocket_t *) lua_newuserdata(L, sizeof(cosocket_t));
 
-    cok = (cosocket_t *) lua_newuserdata(L, sizeof(cosocket_t));
+    if(!cok){
+        lua_pushnil(L);
+        lua_pushstring(L, "stack error!");
+        return 2;
+    }
+
+    bzero(cok, sizeof(cosocket_t));
 
     if(lua_isboolean(L, 1) && lua_toboolean(L, 1) == 1) {
         cok->use_ssl = 1;
@@ -920,21 +926,18 @@ static int lua_co_tcp(lua_State *L)
         cok->use_ssl = 0;
     }
 
-    bzero(cok, sizeof(cosocket_t));
-
     cok->L = L;
     cok->fd = -1;
     cok->timeout = 30000;
-
+    /*
     if(luaL_newmetatable(L, "cosocket")) {
-        /* Module table to be set as upvalue */
         //luaL_checkstack(L, 1, "not enough stack to register connection MT");
         lua_pushvalue(L, lua_upvalueindex(1));
         setfuncs(L, M, 1);
         lua_pushvalue(L, -1);
         lua_setfield(L, -2, "__index");
-    }
-
+    }*/
+    luaL_getmetatable(L, "cosocket:tcp");
     lua_setmetatable(L, -2);
 
     return 1;
@@ -1167,8 +1170,8 @@ if coroutine_status(t) == 'suspended' or not coroutine_waits[t] then return end 
 	coroutine_resume(coroutine_waits[t], ...) \
 	coroutine_waits[t] = nil \
 end \
-coroutine_wait=function(t,f) \
-	if coroutine_status(t) ~= 'suspended' then return true end \
+coroutine_wait=function(t) \
+	if type(t) ~= 'thread' or coroutine_status(t) ~= 'suspended' then return true end \
 	local t2 = thread_self() \
 	coroutine_waits[t] = t2 \
 	return coroutine_yield() \
@@ -1205,6 +1208,14 @@ end \
 coroutine_resume=coroutine.resume");
 
     lua_pcall(L, 0, 0, 0);
+
+    luaL_newmetatable(L, "cosocket:tcp");
+    //luaL_checkstack(L, 1, "not enough stack to register connection MT");
+    lua_pushvalue(L, lua_upvalueindex(1));
+    setfuncs(L, M, 1);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    lua_pop(L, 1);
 
     static const struct luaL_reg _MT[] = {{NULL, NULL}};
     luaL_openlib(L, "cosocket", cosocket_methods, 0);

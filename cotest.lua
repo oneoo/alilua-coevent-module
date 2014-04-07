@@ -197,7 +197,6 @@ function test_http_client(id, host, uri)
 --print(oss)
 	print('test_http_client ended', id, (oss:find('</html>') or oss:find('2006')) and true or false, oss)
 	if not e and not s then os.exit(1) end
-	return id, (oss:find('</html>') or oss:find('2006')) and true or false, kc
 end
 --collectgarbage('stop')
 
@@ -225,7 +224,7 @@ local af = function()
 	coroutine_wait(t2)
 	coroutine_wait(t3)
 	
-	rts,e = wait({ts[1], ts[2], 'aaa'})
+	rts,e = wait(ts)
 
 	for i=1,1000 do
 		if not rts[i] then break end
