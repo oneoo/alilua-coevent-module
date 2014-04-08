@@ -1,6 +1,9 @@
 /*
  * Shmulik Regev <shmulbox@gmail.com>
  * fix build for luajit
+ * 
+ * oneoo <oneoo@yo2.com>
+ * fix newmetatables
  */
 
 #include <ctype.h>
@@ -113,9 +116,6 @@ static MDB_val* pop_val(lua_State* L,int index,MDB_val* val) {
     return val;
 }
 
-void txn_register(lua_State* L);
-void cursor_register(lua_State* L);
-static int llmdb_env_inited = 0;
 /* env */
 static int env_open(lua_State *L) {
     MDB_env* env = check_env(L,1);
@@ -128,11 +128,7 @@ static int env_open(lua_State *L) {
         return str_error_and_out(L,"path required");
     }
     err = mdb_env_open(env,path,flags,mode);
-    if(!llmdb_env_inited){
-        llmdb_env_inited = 1;
-        txn_register(L);
-        cursor_register(L); /// fix by oneoo
-    }
+
     return success_or_err(L,err);
 }
 
@@ -390,13 +386,12 @@ static const lua_reg_t cursor_methods[] = {
 };
 
 void cursor_register(lua_State* L) {
-
-    luaL_newmetatable(L,CURSOR);
-    lua_set_funcs(L,CURSOR,cursor_methods);
-    lua_settable(L,-1);
-
-    luaL_getmetatable(L,CURSOR);
-    lua_setfield(L,-1,"__index");
+    luaL_newmetatable(L, CURSOR);
+    lua_pushvalue(L, lua_upvalueindex(1));
+    setfuncs(L, cursor_methods, 1);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    lua_pop(L, 1);
 }
 
 
@@ -568,14 +563,13 @@ static const lua_reg_t txn_methods[] = {
     {NULL,  NULL}
 };
 
-
 void txn_register(lua_State* L) {
-    luaL_newmetatable(L,TXN);
-    lua_set_funcs(L,TXN,txn_methods);
-    lua_settable(L,-1);
-
-    luaL_getmetatable(L,TXN);
-    lua_setfield(L,-1,"__index");
+    luaL_newmetatable(L, TXN);
+    lua_pushvalue(L, lua_upvalueindex(1));
+    setfuncs(L, txn_methods, 1);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    lua_pop(L, 1);
 }
 
 /* globals */
@@ -612,8 +606,6 @@ static const lua_reg_t globals[] = {
     {"env_create",lmdb_env_create},
     {NULL,  NULL}
 };
-
-
 
 int luaopen_llmdb(lua_State *L) {
     luaL_newmetatable(L,LIGHTNING);
@@ -681,8 +673,8 @@ int luaopen_llmdb(lua_State *L) {
     setfield_enum(MDB_SET_RANGE);
 
     env_register(L);
-    //txn_register(L);
-    //cursor_register(L);
+    txn_register(L);
+    cursor_register(L);
     luaL_getmetatable(L,LIGHTNING);
     return 1;
 }
