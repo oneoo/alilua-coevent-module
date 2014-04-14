@@ -1,9 +1,9 @@
--- Copyright (C) 2012 Yichun Zhang (agentzh)
-
+-- Copyright (C) Yichun Zhang (agentzh), CloudFlare Inc.
+-- oneoo modifed to aLiLua
 
 local bit = require "bit"
 local sub = string.sub
-local tcp
+local tcp --= ngx.socket.tcp
 local strbyte = string.byte
 local strchar = string.char
 local strfind = string.find
@@ -60,6 +60,11 @@ else
 end
 -- end
 
+local ok, new_tab = pcall(require, "table.new")
+if not ok then
+    new_tab = function (narr, nrec) return {} end
+end
+
 local _M = { _VERSION = '0.13' }
 
 
@@ -80,7 +85,7 @@ local mt = { __index = _M }
 
 
 -- mysql field value type converters
-local converters = {}
+local converters = new_tab(0, 8)
 
 for i = 0x01, 0x05 do
     -- tiny, short, long, float, double
@@ -164,8 +169,8 @@ end
 
 
 local function _dump(data)
-    local bytes = {}
     local len = #data
+    local bytes = new_tab(len, 0)
     for i = 1, len do
         bytes[i] = strbyte(data, i)
     end
@@ -174,8 +179,8 @@ end
 
 
 local function _dumphex(data)
-    local bytes = {}
     local len = #data
+    local bytes = new_tab(len, 0)
     for i = 1, len do
         bytes[i] = tohex(strbyte(data, i), 2)
     end
@@ -191,8 +196,8 @@ local function _compute_token(password, scramble)
     local stage1 = sha1(password)
     local stage2 = sha1(stage1)
     local stage3 = sha1(scramble .. stage2)
-    local bytes = {}
     local n = #stage1
+    local bytes = new_tab(n, 0)
     for i = 1, n do
          bytes[i] = strchar(bxor(strbyte(stage3, i), strbyte(stage1, i)))
     end
@@ -320,7 +325,7 @@ end
 
 
 local function _parse_ok_packet(packet)
-    local res = {}
+    local res = new_tab(0, 5)
     local pos
 
     res.affected_rows, pos = _from_length_coded_bin(packet, 2)
@@ -387,7 +392,7 @@ end
 
 
 local function _parse_field_packet(data)
-    local col = {}
+    local col = new_tab(0, 2)
     local catalog, db, table, orig_table, orig_name, charsetnr, length
     local pos
     catalog, pos = _from_length_coded_str(data, 1)
@@ -428,9 +433,14 @@ end
 
 
 local function _parse_row_data_packet(data, cols, compact)
-    local row = {}
     local pos = 1
     local ncols = #cols
+    local row
+    if compact then
+        row = new_tab(ncols, 0)
+    else
+        row = new_tab(0, ncols)
+    end
     for i = 1, ncols do
         local value
         value, pos = _from_length_coded_str(data, pos)
@@ -820,7 +830,7 @@ local function read_result(self)
 
     --print("field count: ", field_count)
 
-    local cols = {}
+    local cols = new_tab(field_count, 0)
     for i = 1, field_count do
         local col, err, errno, sqlstate = _recv_field_packet(self)
         if not col then
@@ -844,7 +854,7 @@ local function read_result(self)
 
     local compact = self.compact
 
-    local rows = {}
+    local rows = new_tab(4, 0)
     local i = 0
     while true do
         --print("reading a row")
@@ -1063,6 +1073,26 @@ local function parse_sql(...)
     end
 
     return sql
+end
+
+function _M.get_var(self, query)
+    local sql = parse_sql(query)
+    local _sql = sql:upper()
+    
+    if not _sql:find(' LIMIT ') then
+        local i = sql:find(';')
+        if not i then i = #sql else i = i-1 end
+        sql = sql:sub(1,i)..' LIMIT 1'..sql:sub(i+1)
+    end
+    
+    local bytes, err = send_query(self, sql)
+    if not bytes then
+        return nil, "failed to send query: " .. err
+    end
+
+    local r, err = read_result(self)
+    if r and #r < 1 then r = nil else r = r[1][next(r[1])] end
+    return r, err
 end
 
 function _M.get_row(self, query)
