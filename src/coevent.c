@@ -194,7 +194,8 @@ static int lua_co_connect(lua_State *L)
 
                 if(cok->pool_size < 0) {
                     cok->pool_size = 0;
-                }else if(cok->pool_size > 1000){
+
+                } else if(cok->pool_size > 1000) {
                     cok->pool_size = 1000;
                 }
 
@@ -855,7 +856,8 @@ int lua_co_setkeepalive(lua_State *L)
 
     if(cok->pool_size < 0) {
         cok->pool_size = 0;
-    }else if(cok->pool_size > 1000){
+
+    } else if(cok->pool_size > 1000) {
         cok->pool_size = 1000;
     }
 
@@ -911,7 +913,7 @@ static int lua_co_tcp(lua_State *L)
 {
     cosocket_t *cok = (cosocket_t *) lua_newuserdata(L, sizeof(cosocket_t));
 
-    if(!cok){
+    if(!cok) {
         lua_pushnil(L);
         lua_pushstring(L, "stack error!");
         return 2;
@@ -956,14 +958,14 @@ int lua_f_coroutine_resume_waiting(lua_State *L)
 
     if(coresume_resume_waiting_handler != 0) {
         lua_rawgeti(L, LUA_REGISTRYINDEX, coresume_resume_waiting_handler);
-        lua_pushthread(L);
 
-        if(nargs > 0) {
-            int i = 0;
+        if(nargs == 0) {
+            lua_pushthread(L);
 
-            for(i = 0; i < nargs; i++) {
-                lua_pushvalue(L, -2 - nargs);
-            }
+        } else {
+            lua_insert(L, 1);
+            lua_pushthread(L);
+            lua_insert(L, 2);
         }
 
         if(lua_pcall(L, nargs + 1, 0, 0)) {
@@ -1125,7 +1127,7 @@ int luaopen_coevent(lua_State *L)
 {
     LM = L;
     _loop_fd = -1;
-    
+
     swop_top = malloc(sizeof(cosocket_swop_t));
     swop_top->next = NULL;
 

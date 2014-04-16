@@ -14,7 +14,7 @@ $sudo make install clean
 
 $sudo make LUAJIT=/usr/local/lib install clean
 
-###Not Support Lua on Mac OS, But Luajit Supported!
+###Don't Support Lua on Mac OS, But Support Luajit!
 
 Start
 --------
@@ -185,7 +185,7 @@ Waits on one child "light threads" and returns the results (either successfully 
 Sleeps for the little times without blocking.
 
     for i=1,10000 do
-        swop() --auto sleep a little times
+        swop() --auto sleep a little time
         print(i)
     end
 
