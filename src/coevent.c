@@ -1079,7 +1079,7 @@ void add_io_counts()  /// for alilua-serv
     io_counts += 2;
 }
 
-static int coevnet_module_do_other_jobs()
+int coevnet_module_do_other_jobs()
 {
     io_counts ++;
     swop_counter = swop_counter / 2;

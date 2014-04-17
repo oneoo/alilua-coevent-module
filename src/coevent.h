@@ -97,7 +97,7 @@ int tcp_connect(const char *host, int port, cosocket_t *cok, int loop_fd, int *r
 int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size,
                            se_ptr_t *ptr, void *ssl, void *ctx);
 
-static int coevnet_module_do_other_jobs();
+int coevnet_module_do_other_jobs();
 
 int lua_f_coroutine_swop(lua_State *L);
 int check_lua_sleep_timeouts();
