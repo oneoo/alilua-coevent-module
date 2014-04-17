@@ -8,6 +8,56 @@ static unsigned char temp_buf[4096];
 static int _process_count = 1;
 static int io_counts = 0;
 
+static void timeout_handle(void *ptr)
+{
+    cosocket_t *cok = ptr;
+    delete_timeout(cok->timeout_ptr);
+
+    lua_pushnil(cok->L);
+
+    if(cok->ptr) {
+        if(cok->status == 3) {
+            lua_pushstring(cok->L, "Connect error!(wait pool timeout)");
+
+        } else if(((se_ptr_t *) cok->ptr)->wfunc == cosocket_be_ssl_connected) {
+            lua_pushstring(cok->L, "SSL Connect timeout!");
+
+        } else if(((se_ptr_t *) cok->ptr)->wfunc == cosocket_be_write) {
+            lua_pushstring(cok->L, "Send timeout!");
+
+        } else if(((se_ptr_t *) cok->ptr)->rfunc == cosocket_be_read) {
+            lua_pushstring(cok->L, "Read timeout!");
+
+        } else {
+            lua_pushstring(cok->L, "Timeout!");
+        }
+
+    } else {
+        lua_pushstring(cok->L, "Timeout!");
+    }
+
+    {
+        se_delete(cok->ptr);
+        cok->ptr = NULL;
+        close(cok->fd);
+        connection_pool_counter_operate(cok->pool_key, -1);
+        cok->fd = -1;
+        cok->status = 0;
+    }
+
+    if(cok->ssl) {
+        SSL_shutdown(cok->ssl);
+        SSL_CTX_free(cok->ctx);
+        cok->ctx = NULL;
+        SSL_free(cok->ssl);
+        cok->ssl = NULL;
+    }
+
+    cok->inuse = 0;
+
+    lua_co_resume(cok->L, 2);
+}
+
 int lua_co_resume(lua_State *L , int nargs)
 {
     int ret = lua_resume(L, nargs);
@@ -128,7 +178,7 @@ static void be_connect(void *data, int fd)
             return;
         }
 
-        add_to_timeout_link(cok, cok->timeout);
+        cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);
 
         return;
     }
@@ -246,7 +296,7 @@ static int lua_co_connect(lua_State *L)
                 /// pool full
                 if(add_waiting_get_connection(cok)) {
                     cok->status = 3;
-                    add_to_timeout_link(cok, cok->timeout);
+                    cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);
                     //printf("wait %d\n", cok->fd);
                     cok->inuse = 1;
                     return lua_yield(L, 0);
@@ -300,11 +350,8 @@ int cosocket_be_write(se_ptr_t *ptr)
             cok->send_buf_need_free = NULL;
         }
 
-        /*if(!del_in_timeout_link(cok)){
-            printf("del error %d\n", __LINE__);
-            exit(1);
-        }*/
-        del_in_timeout_link(cok);
+        delete_timeout(cok->timeout_ptr);
+        cok->timeout_ptr = NULL;
 
         int rc = 1;
 
@@ -411,7 +458,7 @@ static int lua_co_send(lua_State *L)
 
         se_be_write(cok->ptr, cosocket_be_write);
 
-        add_to_timeout_link(cok, cok->timeout);
+        cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);
     }
     cok->inuse = 1;
     return lua_yield(L, 0);
@@ -603,7 +650,8 @@ init_read_buf:
     if(n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
         int rfd = cok->fd;
         /// socket closed
-        del_in_timeout_link(cok);
+        delete_timeout(cok->timeout_ptr);
+        cok->timeout_ptr = NULL;
         {
             cok->status = 0;
 
@@ -644,11 +692,8 @@ init_read_buf:
 
             if(rt > 0) {
                 cok->in_read_action = 0;
-                /*if(!del_in_timeout_link(cok)){
-                    printf("del error %d\n", __LINE__);
-                    exit(1);
-                }*/
-                del_in_timeout_link(cok);
+                delete_timeout(cok->timeout_ptr);
+                cok->timeout_ptr = NULL;
                 cok->inuse = 0;
 
                 ret = lua_co_resume(cok->L, rt);
@@ -730,7 +775,7 @@ static int lua_co_read(lua_State *L)
             se_be_read(cok->ptr, cosocket_be_read);
         }
 
-        add_to_timeout_link(cok, cok->timeout);
+        cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);
     }
     cok->inuse = 1;
     return lua_yield(L, 0);
@@ -757,7 +802,9 @@ static int _lua_co_close(lua_State *L, cosocket_t *cok)
         cok->send_buf_need_free = NULL;
     }
 
-    del_in_timeout_link(cok);
+    delete_timeout(cok->timeout_ptr);
+    cok->timeout_ptr = NULL;
+
     cok->status = 0;
 
     if(cok->fd > -1) {
@@ -1032,8 +1079,7 @@ void add_io_counts()  /// for alilua-serv
     io_counts += 2;
 }
 
-time_t chk_time = 0;
-static int do_other_jobs()
+static int coevnet_module_do_other_jobs()
 {
     io_counts ++;
     swop_counter = swop_counter / 2;
@@ -1043,14 +1089,10 @@ static int do_other_jobs()
         lua_gc(LM, LUA_GCRESTART, 0);
     }
 
-    if(now - chk_time > 0) {
-        chk_time = now;
-        chk_do_timeout_link(_loop_fd);
-        get_connection_in_pool(_loop_fd, 0, NULL);
-    }
+    get_connection_in_pool(_loop_fd, 0, NULL);
+    check_lua_sleep_timeouts();
 
     /// resume swops
-
     cosocket_swop_t *swop = NULL;
 
     if(swop_top->next != NULL) {
@@ -1080,7 +1122,7 @@ static int do_other_jobs()
 
 static int _do_other_jobs()
 {
-    do_other_jobs();
+    coevnet_module_do_other_jobs();
 
     if(lua_status(job_L) != LUA_YIELD) {
         return 0;
@@ -1143,6 +1185,7 @@ int luaopen_coevent(lua_State *L)
     lua_register(L, "startloop", lua_f_startloop);
     lua_register(L, "thread_self", lua_f_thread_self);
     lua_register(L, "swop", lua_f_coroutine_swop);
+    lua_register(L, "sleep", lua_f_sleep);
     lua_register(L, "md5", lua_f_md5);
     lua_register(L, "sha1bin", lua_f_sha1bin);
     lua_register(L, "hmac_sha1", lua_f_hmac_sha1);

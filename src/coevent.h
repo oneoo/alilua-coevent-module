@@ -51,7 +51,7 @@ typedef struct {
     char z[2]; /// size align
 } cosocket_link_buf_t;
 
-#define _SENDBUF_SIZE 3857
+#define _SENDBUF_SIZE 3913
 typedef struct {
     int fd;
     uint8_t use_ssl;
@@ -77,6 +77,7 @@ typedef struct {
     size_t readed;
 
     int timeout;
+    timeout_t *timeout_ptr;
     struct sockaddr_in addr;
     int pool_size;
     unsigned long pool_key;
@@ -85,19 +86,9 @@ typedef struct {
     int inuse;
 } cosocket_t;
 
-typedef struct {
-    cosocket_t *cok;
-    void *uper;
-    void *next;
-    long timeout;
-} timeout_link_t;
-
 int lua_co_resume(lua_State *L , int args);
 int cosocket_be_ssl_connected(se_ptr_t *ptr);
-int add_to_timeout_link(cosocket_t *cok, int timeout);
-int del_in_timeout_link(cosocket_t *cok);
 int lua_f_coroutine_resume_waiting(lua_State *L);
-int chk_do_timeout_link(int loop_fd);
 
 int cosocket_be_write(se_ptr_t *ptr);
 int cosocket_be_read(se_ptr_t *ptr);
@@ -105,6 +96,13 @@ int cosocket_be_read(se_ptr_t *ptr);
 int tcp_connect(const char *host, int port, cosocket_t *cok, int loop_fd, int *ret);
 int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size,
                            se_ptr_t *ptr, void *ssl, void *ctx);
+
+static int coevnet_module_do_other_jobs();
+
+int lua_f_coroutine_swop(lua_State *L);
+int check_lua_sleep_timeouts();
+int _lua_sleep(lua_State *L, int msec);
+int lua_f_sleep(lua_State *L);
 
 int lua_f_time(lua_State *L);
 int lua_f_longtime(lua_State *L);

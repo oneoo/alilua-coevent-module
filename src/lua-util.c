@@ -14,6 +14,119 @@ int lua_f_longtime(lua_State *L)
     return 1;
 }
 
+
+typedef struct {
+    void *L;
+    long timeout;
+    void *uper;
+    void *next;
+} sleep_timeout_t;
+
+#define TIME_BUCKET_SIZE 6000
+static sleep_timeout_t *timeout_links[TIME_BUCKET_SIZE] = {0};
+static sleep_timeout_t *timeout_link_ends[TIME_BUCKET_SIZE] = {0};
+static long now_4sleep = 0;
+static long l_now = 0;
+
+int check_lua_sleep_timeouts()
+{
+    l_now = longtime() / 10;
+
+    if(now_4sleep == 0) {
+        now_4sleep = l_now - 5;
+    }
+
+    do {
+        int k = now_4sleep % TIME_BUCKET_SIZE;
+
+        sleep_timeout_t *m = timeout_links[k], *n = NULL;
+        lua_State *L = NULL;
+
+        while(m) {
+            n = m;
+            m = m->next;
+
+            if(l_now >= n->timeout) { // timeout
+                {
+                    if(n->uper) {
+                        ((sleep_timeout_t *) n->uper)->next = n->next;
+
+                    } else {
+                        timeout_links[k] = n->next;
+                    }
+
+                    if(n->next) {
+                        ((sleep_timeout_t *) n->next)->uper = n->uper;
+
+                    } else {
+                        timeout_link_ends[k] = n->uper;
+                    }
+
+                    L = n->L;
+                    free(n);
+                }
+
+                if(L) {
+                    lua_resume(L, 0);
+                    l_now = longtime() / 10;
+                }
+
+                L = NULL;
+            }
+        }
+
+        if(now_4sleep < l_now) {
+            now_4sleep++;
+            continue;
+        }
+    } while(now_4sleep < l_now);
+
+    return 1;
+}
+
+int _lua_sleep(lua_State *L, int msec)
+{
+    sleep_timeout_t *n = malloc(sizeof(sleep_timeout_t));
+
+    if(!n) {
+        return 0;
+    }
+
+    n->timeout = (longtime() + msec) / 10;
+    n->uper = NULL;
+    n->next = NULL;
+    n->L = L;
+
+    int k = n->timeout % TIME_BUCKET_SIZE;
+
+    if(timeout_link_ends[k] == NULL) {
+        timeout_links[k] = n;
+        timeout_link_ends[k] = n;
+
+    } else { // add to link end
+        timeout_link_ends[k]->next = n;
+        n->uper = timeout_link_ends[k];
+        timeout_link_ends[k] = n;
+    }
+
+    return lua_yield(L, 0);
+}
+
+int lua_f_sleep(lua_State *L)
+{
+    if(!lua_isnumber(L, 1)) {
+        return 0;
+    }
+
+    int msec = lua_tonumber(L, 1);
+
+    if(msec < 1) {
+        return lua_f_coroutine_swop(L);
+    }
+
+    return _lua_sleep(L, msec);
+}
+
 size_t lua_calc_strlen_in_table(lua_State *L, int index, int arg_i, unsigned strict)
 {
     double key = 0;
