@@ -63,7 +63,7 @@ int lua_co_resume(lua_State *L , int nargs)
     int ret = lua_resume(L, nargs);
 
     if(ret == LUA_ERRRUN && lua_isstring(L, -1)) {
-        //printf ( "%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring ( L, -1 ) );
+        LOGF(ERR, "%s", lua_tostring(L, -1));
 
         //lua_pop(cok->L, -1);
         if(lua_gettop(L) > 1) {
@@ -1016,7 +1016,7 @@ int lua_f_coroutine_resume_waiting(lua_State *L)
         }
 
         if(lua_pcall(L, nargs + 1, 0, 0)) {
-            LOGF(ERR, "%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring(L, -1));
+            LOGF(ERR, "%s", lua_tostring(L, -1));
             lua_pop(L, -1);
             exit(0);
         }
@@ -1112,7 +1112,7 @@ int coevnet_module_do_other_jobs()
             int ret = lua_resume(L, 0);
 
             if(ret == LUA_ERRRUN && lua_isstring(L, -1)) {
-                LOGF(ERR, "%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring(L, -1));
+                LOGF(ERR, "%s", lua_tostring(L, -1));
                 lua_pop(L, -1);
                 lua_f_coroutine_resume_waiting(L);
             }
