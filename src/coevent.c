@@ -12,6 +12,7 @@ static void timeout_handle(void *ptr)
 {
     cosocket_t *cok = ptr;
     delete_timeout(cok->timeout_ptr);
+    cok->timeout_ptr = NULL;
 
     lua_pushnil(cok->L);
 
@@ -1017,8 +1018,7 @@ int lua_f_coroutine_resume_waiting(lua_State *L)
 
         if(lua_pcall(L, nargs + 1, 0, 0)) {
             LOGF(ERR, "%s", lua_tostring(L, -1));
-            lua_pop(L, -1);
-            exit(0);
+            exit(1);
         }
     }
 
@@ -1084,11 +1084,6 @@ int coevnet_module_do_other_jobs()
     io_counts ++;
     swop_counter = swop_counter / 2;
 
-    if(io_counts >= 10000) {
-        io_counts = 0;
-        lua_gc(LM, LUA_GCRESTART, 0);
-    }
-
     get_connection_in_pool(_loop_fd, 0, NULL);
     check_lua_sleep_timeouts();
 
@@ -1117,6 +1112,11 @@ int coevnet_module_do_other_jobs()
                 lua_f_coroutine_resume_waiting(L);
             }
         }
+    }
+
+    if(io_counts >= 10000) {
+        io_counts = 0;
+        lua_gc(LM, LUA_GCRESTART, 0);
     }
 }
 

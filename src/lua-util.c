@@ -25,8 +25,8 @@ typedef struct {
 #define TIME_BUCKET_SIZE 6000
 static sleep_timeout_t *timeout_links[TIME_BUCKET_SIZE] = {0};
 static sleep_timeout_t *timeout_link_ends[TIME_BUCKET_SIZE] = {0};
-static long now_4sleep = 0;
-static long l_now = 0;
+static unsigned long now_4sleep = 0;
+static unsigned long l_now = 0;
 
 int check_lua_sleep_timeouts()
 {
