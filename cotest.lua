@@ -254,8 +254,8 @@ end
 L(function()
 	coroutine_wait(newthread(test_mysql))
 
-	local r,h,e = httprequest('https://www.upyun.com/index.html') print(r,h,e)
+	local res,e = httprequest('https://www.upyun.com/index.html')
 	--local r,h,e = httprequest('http://www.163.com/index.html') print(r,h,e)
-	if h then for k,v in pairs(h) do print(k,v) end end
+	if res and res.header then print(res.body) for k,v in pairs(res.header) do print(k..':',v) end end
 end)
 print('end')

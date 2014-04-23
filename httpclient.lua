@@ -14,6 +14,10 @@ local tcp
 local base64_encode = base64_encode
 local insert=table.insert
 local concat=table.concat
+local match = string.match
+local function trim(s)
+	return match(s,'^()%s*$') and '' or match(s,'^%s*(.*%S)')
+end
 
 if ngx and ngx.say then
 	tcp = ngx.socket.tcp
@@ -47,9 +51,15 @@ function httprequest(url, params)
 	end
 	
 	if not params.pool_size then params.pool_size = 0 end
-	
+	if params.pool_size then
+		if ngx then
+			sock:setkeepalive(60, params.pool_size)
+		else
+			sock:setkeepalive(params.pool_size)
+		end
+	end
 	if params.timeout then
-		sock:settimeout(params.timeout/(ngx and 1 or 1000))
+		sock:settimeout(params.timeout)
 	end
 	
 	local host = url:match('^([^/]+)')
@@ -359,7 +369,30 @@ function httprequest(url, params)
 	
 	if type(bodys) == 'table' then bodys = concat(bodys) end
 	
-	return bodys, headers, rterr
+	--return bodys, headers, rterr
+	local res = {}
+	res.body = bodys
+	if headers then
+		local i = headers[1]:find(' ', 1, true)
+		if i then
+			local e = headers[1]:find(' ', i+1, true)
+			res.status = e and tonumber(headers[1]:sub(i+1, e)) or 0
+		else
+			res.status = 0
+		end
+
+		local header = {}
+		for k,v in ipairs(headers) do
+			local i = v:find(':', 1, true)
+			if i then
+				header[v:sub(1,i-1):lower()] = trim(v:sub(i+1))
+			end
+		end
+
+		res.header = header
+	end
+
+	return res, rterr
 end
 
 local class_mt = {
