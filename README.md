@@ -1,6 +1,6 @@
-alilua coevent module
+aLiLua coevent Module
 =========
-A Lua epoll base coroutine module (Only support Linux platform)
+A Lua epoll base coroutine module
 
 Install
 --------
@@ -18,7 +18,7 @@ $sudo make LUAJIT=/usr/local/lib install clean
 
 Start
 --------
-###single loop
+###Single Loop
     local L = require('coevent')
     L(function()
         local cok,err = cosocket.tcp()
@@ -52,7 +52,7 @@ Start
         end
     end)
 
-###multi loop
+###Multi Loop
     local L = require('coevent')
 
     function test_case(test_id)
@@ -114,13 +114,9 @@ cosocket Directives
 Creates and returns a TCP or stream-oriented unix domain socket object, The following methods are supported on this object:
 
 * connect
-
 * send
-
 * receive
-
 * close
-
 * settimeout
 
 ###cok:connect
@@ -144,7 +140,7 @@ The input argument data can either be '*l', '*a' or a number.
 
 * `'*a'`: reads from the socket until the connection is closed. No end-of-line translation is performed;
 
-**If no argument is specified, then it is assumed to be the pattern '*a'**
+**If no argument is specified, then it is assumed to be the pattern '*l'**
 
 ###cok:colse
 **syntax:** ok, err = cok:close()
@@ -154,7 +150,7 @@ Closes the current TCP or stream unix domain socket. It returns the 1 in case of
 Socket objects that have not invoked this method (and associated connections) will be closed when the socket object is released by the Lua GC (Garbage Collector) or the current client HTTP request finishes processing.
 
 ###cok:settimeout
-**syntax:** cok:settimeout(sec)
+**syntax:** cok:settimeout(msec)
 
 Set the timeout value in milliseconds for subsequent socket operations (connect, receive, and iterators returned from receiveuntil).
 
@@ -168,13 +164,13 @@ thread Directives
 --------
 ###newthread
 
-**synctx:** t = newthread(function() end, ...) 
+**syntax:** t = newthread(function() end, ...) 
 
 Creates a user Lua coroutines with a Lua function, and returns a coroutine object.
 
 Similar to the standard Lua coroutine.create API, but works in the context of the Lua coroutines created by alilua.
 
-###coroutine_wait
+###wait
 **syntax:** returns = coroutine_wait(t)
 
 Waits on one child "light threads" and returns the results (either successfully or with an error).
@@ -182,10 +178,90 @@ Waits on one child "light threads" and returns the results (either successfully 
 ###swop
 **syntax:** swop()
 
-Sleeps for the little times without blocking.
+Sleeps for the little time without blocking.
 
     for i=1,10000 do
         swop() --auto sleep a little time
         print(i)
     end
 
+###sleep
+**syntax:** sleep(msec)
+
+Sleeps without blocking.
+
+	sleep(1000) --1 second
+
+Other Directives
+---------
+
+###open_log
+
+**syntax:** open_log('path to log file')
+
+Open a logfile to the logger for a program.
+
+**path syntax:** `/tmp/error.log` or `/tmp/error.log,3` (level=NOTICE)
+
+Log Level:
+
+```
+DEBUG,INFO,NOTICE,WARN,ALERT,ERR = 1,2,3,4,5,6
+```
+
+###LOG
+
+**syntax:** LOG(WARN, 'string msg', 'msg2', 3)
+**syntax:** LOG(WARN, {'string msg', 'msg2', 3})
+
+###md5
+
+**syntax:** key = md5('string')
+
+###sha1bin
+
+**syntax:** key = sha1bin('string')
+
+###hmac_sha1
+
+**syntax:** key = hmac_sha1('string')
+
+###base64_encode
+
+**syntax:** estr = base64_encode('string')
+
+###base64_decode
+
+**syntax:** dstr = base64_decode('string')
+
+###escape
+
+**syntax:** estr = escape('string')
+
+Escapes a string for use in a mysql query.
+
+Characters encoded are NUL (ASCII 0), \n, \r, \, ', ", and Control-Z.
+
+###escape_uri
+
+**syntax:** estr = escape_uri('string')
+
+Url Encoding
+
+###unescape_uri
+
+**syntax:** dstr = unescape_uri('string')
+
+Url Decoding
+
+###time
+
+**syntax:** t = time()
+
+Returns the current time measured in the number of seconds since the Unix Epoch (January 1 1970 00:00:00 GMT).
+
+###longtime
+
+**syntax:** msec = longtime()
+
+Returns the current Unix timestamp with microseconds. 
