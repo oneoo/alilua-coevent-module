@@ -97,9 +97,9 @@ Start
         print(coroutine_wait(t2)) --print readed len
     end)
 
-Epoll loop Directives
+Main Directives
 ---------
-**synctx:** coevent(function)
+**syntax:** startloop(function)
 
     local L = require('coevent')
     L(function()
@@ -171,11 +171,15 @@ Creates a user Lua coroutines with a Lua function, and returns a coroutine objec
 Similar to the standard Lua coroutine.create API, but works in the context of the Lua coroutines created by alilua.
 
 ###wait
-**syntax:** returns = coroutine_wait(t)
 
-Waits on one child "light threads" and returns the results (either successfully or with an error).
+**syntax:** return = wait(t)
+
+**syntax:** returns = wait({t1, t2, t3, ...})
+
+Waits on child "light threads" and returns the results (either successfully or with an error).
 
 ###swop
+
 **syntax:** swop()
 
 Sleeps for the little time without blocking.
@@ -186,6 +190,7 @@ Sleeps for the little time without blocking.
     end
 
 ###sleep
+
 **syntax:** sleep(msec)
 
 Sleeps without blocking.
