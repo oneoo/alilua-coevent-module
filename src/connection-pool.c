@@ -99,34 +99,59 @@ void connection_pool_counter_operate(unsigned long pool_key, int a)
 void *waiting_get_connections[64] = {0};
 void *waiting_get_connections_end[64] = {0};
 
-int add_waiting_get_connection(cosocket_t *cok)
+void *add_waiting_get_connection(cosocket_t *cok)
 {
     if(cok->pool_key < 1) {
-        return 0;
+        return NULL;
     }
 
     int k = cok->pool_key % 64;
     cosocket_waiting_get_connection_t *n = malloc(sizeof(cosocket_waiting_get_connection_t));
 
     if(!n) {
-        return 0;
+        return NULL;
     }
 
     n->cok = cok;
     n->next = NULL;
     n->uper = NULL;
+    n->k = k;
 
     if(waiting_get_connections[k] == NULL) {
         waiting_get_connections[k] = n;
         waiting_get_connections_end[k] = n;
-        return 1;
+        return n;
 
     } else {
         ((cosocket_waiting_get_connection_t *) waiting_get_connections_end[k])->next = n;
         n->uper = waiting_get_connections_end[k];
         waiting_get_connections_end[k] = n;
-        return 1;
+        return n;
     }
+}
+
+void delete_in_waiting_get_connection(void *_n)
+{
+    printf("delete_in_waiting_get_connection\n");
+    cosocket_waiting_get_connection_t *n = _n;
+    int k = n->k;
+
+    if(n->uper) {
+        ((cosocket_waiting_get_connection_t *) n->uper)->next = n->next;
+
+        if(n->next) {
+            ((cosocket_waiting_get_connection_t *) n->next)->uper = n->uper;
+        }
+
+    } else {
+        waiting_get_connections[k] = n->next;
+
+        if(n->next) {
+            ((cosocket_waiting_get_connection_t *) n->next)->uper = NULL;
+        }
+    }
+
+    free(n);
 }
 
 se_ptr_t *get_connection_in_pool(int loop_fd, unsigned long pool_key, cosocket_t *cok)
@@ -283,7 +308,9 @@ int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size, s
                 _cok->status = 2;
                 _cok->reusedtimes = 1;
                 _cok->inuse = 0;
-
+                _cok->pool_wait = NULL;
+                delete_timeout(_cok->timeout_ptr);
+                _cok->timeout_ptr = NULL;
                 se_be_pri(ptr, NULL);
 
                 lua_pushboolean(_cok->L, 1);

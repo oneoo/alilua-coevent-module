@@ -51,11 +51,13 @@ typedef struct {
     char z[2]; /// size align
 } cosocket_link_buf_t;
 
-#define _SENDBUF_SIZE 3913
+#define _SENDBUF_SIZE 3905
 typedef struct {
     int fd;
     uint8_t use_ssl;
     uint8_t in_read_action;
+
+    void *pool_wait;
 
     SSL *ssl;
     SSL_CTX *ctx;

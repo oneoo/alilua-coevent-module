@@ -14,6 +14,11 @@ static void timeout_handle(void *ptr)
     delete_timeout(cok->timeout_ptr);
     cok->timeout_ptr = NULL;
 
+    if(cok->pool_wait) {
+        delete_in_waiting_get_connection(cok->pool_wait);
+        cok->pool_wait = NULL;
+    }
+
     lua_pushnil(cok->L);
 
     if(cok->ptr) {
@@ -92,6 +97,8 @@ int cosocket_be_ssl_connected(se_ptr_t *ptr)
     cosocket_t *cok = ptr->data;
 
     if(SSL_connect(cok->ssl)) {
+        delete_timeout(cok->timeout_ptr);
+        cok->timeout_ptr = NULL;
         se_be_pri(cok->ptr, NULL);
         lua_pushboolean(cok->L, 1);
         cok->inuse = 0;
@@ -295,7 +302,7 @@ static int lua_co_connect(lua_State *L)
 
             if(pool_counter->count >= cok->pool_size / _process_count) {
                 /// pool full
-                if(add_waiting_get_connection(cok)) {
+                if((cok->pool_wait = add_waiting_get_connection(cok))) {
                     cok->status = 3;
                     cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);
                     //printf("wait %d\n", cok->fd);
@@ -803,6 +810,11 @@ static int _lua_co_close(lua_State *L, cosocket_t *cok)
         cok->send_buf_need_free = NULL;
     }
 
+    if(cok->pool_wait) {
+        delete_in_waiting_get_connection(cok->pool_wait);
+        cok->pool_wait = NULL;
+    }
+
     delete_timeout(cok->timeout_ptr);
     cok->timeout_ptr = NULL;
 
@@ -817,7 +829,6 @@ static int _lua_co_close(lua_State *L, cosocket_t *cok)
             se_delete(cok->ptr);
             cok->ptr = NULL;
             connection_pool_counter_operate(cok->pool_key, -1);
-
 
             if(cok->ssl) {
                 SSL_CTX_free(cok->ctx);
