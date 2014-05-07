@@ -109,6 +109,71 @@ int cosocket_be_ssl_connected(se_ptr_t *ptr)
     return 0;
 }
 
+static int _be_connect(cosocket_t *cok, int fd, int yielded)
+{
+    cok->fd = fd;
+    cok->ptr = se_add(_loop_fd, fd, cok);
+    connection_pool_counter_operate(cok->pool_key, 1);
+
+    cok->status = 2;
+    cok->in_read_action = 0;
+
+    if(cok->use_ssl) {
+        cok->ctx = SSL_CTX_new(SSLv23_client_method());
+
+        if(cok->ctx == NULL) {
+            se_delete(cok->ptr);
+            close(cok->fd);
+
+            cok->ptr = NULL;
+            cok->fd = -1;
+            cok->status = 0;
+
+            lua_pushnil(cok->L);
+            lua_pushstring(cok->L, "ssl error: no context");
+            return 2;
+        }
+
+        cok->ssl = SSL_new(cok->ctx);
+
+        if(cok->ssl == NULL) {
+            se_delete(cok->ptr);
+            close(cok->fd);
+
+            cok->ptr = NULL;
+            cok->fd = -1;
+            cok->status = 0;
+
+            SSL_CTX_free(cok->ctx);
+            cok->ctx = NULL;
+
+            lua_pushnil(cok->L);
+            lua_pushstring(cok->L, "ssl error: no context");
+            return 2;
+        }
+
+        SSL_set_fd(cok->ssl, cok->fd);
+        se_be_read(cok->ptr, cosocket_be_ssl_connected);
+
+        if(SSL_connect(cok->ssl) == 1) {
+            se_be_pri(cok->ptr, NULL);
+            lua_pushboolean(cok->L, 1);
+            cok->inuse = 0;
+            return 1;
+        }
+
+        cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);
+
+        return -2;
+    }
+
+    se_be_pri(cok->ptr, NULL);
+    lua_pushboolean(cok->L, 1);
+    cok->inuse = 0;
+
+    return 1;
+}
+
 static void be_connect(void *data, int fd)
 {
     cosocket_t *cok = data;
@@ -132,69 +197,13 @@ static void be_connect(void *data, int fd)
         return;
     }
 
-    cok->fd = fd;
-    cok->ptr = se_add(_loop_fd, fd, cok);
-    connection_pool_counter_operate(cok->pool_key, 1);
+    int ret = _be_connect(cok, fd, 1);
 
-    cok->status = 2;
-    cok->in_read_action = 0;
-
-    if(cok->use_ssl) {
-        cok->ctx = SSL_CTX_new(SSLv23_client_method());
-
-        if(cok->ctx == NULL) {
-            se_delete(cok->ptr);
-            close(cok->fd);
-
-            cok->ptr = NULL;
-            cok->fd = -1;
-            cok->status = 0;
-
-            lua_pushnil(cok->L);
-            lua_pushstring(cok->L, "ssl error: no context");
-            lua_co_resume(cok->L, 2);
-            return;
-        }
-
-        cok->ssl = SSL_new(cok->ctx);
-
-        if(cok->ssl == NULL) {
-            se_delete(cok->ptr);
-            close(cok->fd);
-
-            cok->ptr = NULL;
-            cok->fd = -1;
-            cok->status = 0;
-
-            SSL_CTX_free(cok->ctx);
-            cok->ctx = NULL;
-
-            lua_pushnil(cok->L);
-            lua_pushstring(cok->L, "ssl error: no context");
-            lua_co_resume(cok->L, 2);
-            return;
-        }
-
-        SSL_set_fd(cok->ssl, cok->fd);
-        se_be_read(cok->ptr, cosocket_be_ssl_connected);
-
-        if(SSL_connect(cok->ssl) == 1) {
-            se_be_pri(cok->ptr, NULL);
-            lua_pushboolean(cok->L, 1);
-            cok->inuse = 0;
-            lua_co_resume(cok->L, 1);
-            return;
-        }
-
-        cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);
-
+    if(ret == -2) {
         return;
     }
 
-    se_be_pri(cok->ptr, NULL);
-    lua_pushboolean(cok->L, 1);
-    cok->inuse = 0;
-    lua_co_resume(cok->L, 1);
+    lua_co_resume(cok->L, ret);
 }
 
 static int lua_co_connect(lua_State *L)
@@ -312,7 +321,19 @@ static int lua_co_connect(lua_State *L)
             }
         }
 
-        se_connect(_loop_fd, host, port, cok->timeout > 0 ? cok->timeout : 30, be_connect, cok);
+        int fd = se_connect(_loop_fd, host, port, cok->timeout > 0 ? cok->timeout : 30, be_connect, cok);
+
+        if(fd != -2) {
+            if(fd > -1) {
+                int ret = _be_connect(cok, fd, 0);
+
+                if(ret == -2) {
+                    return lua_yield(L, 0);
+                }
+
+                return ret;
+            }
+        }
     }
 
     return lua_yield(L, 0);
