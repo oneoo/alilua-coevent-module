@@ -316,7 +316,7 @@ int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size, s
 
                 if(lua_resume(_cok->L, 1) == LUA_ERRRUN) {
                     if(lua_isstring(_cok->L, -1)) {
-                        LOGF(ERR, "%s", lua_tostring(L, -1));
+                        LOGF(ERR, "%s", lua_tostring(_cok->L, -1));
                         lua_pop(_cok->L, -1);
                     }
                 }
