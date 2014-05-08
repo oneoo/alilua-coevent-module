@@ -1236,7 +1236,8 @@ DEBUG,INFO,NOTICE,WARN,ALERT,ERR = 1,2,3,4,5,6 \
 table_remove=table.remove \
 coroutine._resume=coroutine.resume \
 _coroutine_resume=coroutine.resume \
-newthread=function(f, ...) local t = coroutine.create(f) local r,e = _coroutine_resume(t, ...) if not r then return nil,e end return t end \
+coroutine_create=coroutine.create \
+newthread=function(f, ...) local t = coroutine_create(f) local r,e = _coroutine_resume(t, ...) if not r then return nil,e end return t end \
 newco = newthread \
 coroutine_status=coroutine.status \
 coroutine_yield=coroutine.yield \
