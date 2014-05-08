@@ -132,7 +132,6 @@ void *add_waiting_get_connection(cosocket_t *cok)
 
 void delete_in_waiting_get_connection(void *_n)
 {
-    printf("delete_in_waiting_get_connection\n");
     cosocket_waiting_get_connection_t *n = _n;
     int k = n->k;
 
@@ -317,7 +316,7 @@ int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size, s
 
                 if(lua_resume(_cok->L, 1) == LUA_ERRRUN) {
                     if(lua_isstring(_cok->L, -1)) {
-                        printf("%s:%d isstring: %s\n", __FILE__, __LINE__, lua_tostring(_cok->L, -1));
+                        LOGF(ERR, "%s", lua_tostring(L, -1));
                         lua_pop(_cok->L, -1);
                     }
                 }
