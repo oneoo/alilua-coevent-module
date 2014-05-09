@@ -6,7 +6,6 @@ static lua_State *LM = NULL;
 static int coresume_resume_waiting_handler = 0;
 static unsigned char temp_buf[4096];
 static int _process_count = 1;
-static int io_counts = 0;
 
 static void timeout_handle(void *ptr)
 {
@@ -341,7 +340,6 @@ static int lua_co_connect(lua_State *L)
 
 int cosocket_be_write(se_ptr_t *ptr)
 {
-    io_counts++;
     cosocket_t *cok = ptr->data;
     int n = 0, ret = 0;
     cok->in_read_action = 0;
@@ -615,7 +613,6 @@ int lua_co_read_(cosocket_t *cok)
 
 int cosocket_be_read(se_ptr_t *ptr)
 {
-    io_counts++;
     cosocket_t *cok = ptr->data;
     int n = 0, ret = 0;
 
@@ -1106,14 +1103,8 @@ void set_loop_fd(int fd, int __process_count)    /// for alilua-serv
     coresume_resume_waiting_handler = luaL_ref(LM, LUA_REGISTRYINDEX);
 }
 
-void add_io_counts()  /// for alilua-serv
-{
-    io_counts += 2;
-}
-
 int coevnet_module_do_other_jobs()
 {
-    io_counts ++;
     swop_counter = swop_counter / 2;
 
     get_connection_in_pool(_loop_fd, 0, NULL);
@@ -1144,11 +1135,6 @@ int coevnet_module_do_other_jobs()
                 lua_f_coroutine_resume_waiting(L);
             }
         }
-    }
-
-    if(io_counts >= 10000) {
-        io_counts = 0;
-        lua_gc(LM, LUA_GCRESTART, 0);
     }
 }
 
