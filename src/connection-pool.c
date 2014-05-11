@@ -329,9 +329,20 @@ int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size, s
 
     int p = (now / connect_pool_ttl) % 2;
 
-    cosocket_connection_pool_t  *n = NULL,
-                                 *m = NULL;
+    cosocket_connection_pool_t  *n = NULL, *m = NULL;
     n = connect_pool_p[p][k];
+
+    int keepalive = 1;
+    setsockopt(ptr->fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&keepalive , sizeof(keepalive));
+#ifdef linux
+    int keepidle = 30;
+    int keepinterval = 5;
+    int keepcount = 3;
+    socklen_t optlen = sizeof(keepidle);
+    setsockopt(ptr->fd, SOL_TCP, TCP_KEEPIDLE, (void *)&keepidle , optlen);
+    setsockopt(ptr->fd, SOL_TCP, TCP_KEEPINTVL, (void *)&keepinterval , optlen);
+    setsockopt(ptr->fd, SOL_TCP, TCP_KEEPCNT, (void *)&keepcount , optlen);
+#endif
 
     if(n == NULL) {
         m = malloc(sizeof(cosocket_connection_pool_t));
