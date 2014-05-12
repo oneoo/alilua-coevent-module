@@ -31,7 +31,7 @@ int lua_f_log(lua_State *L)
         blen = lua_calc_strlen_in_table(L, gn, 2, 0 /* strict */);
 
         if(blen < 1) {
-            return;
+            return 0;
         }
 
         char *buf = (char *)&tbuf;
@@ -40,7 +40,7 @@ int lua_f_log(lua_State *L)
             buf = malloc(blen);
 
             if(!buf) {
-                return;
+                return 0;
             }
 
             lua_copy_str_in_table(L, gn, buf);
