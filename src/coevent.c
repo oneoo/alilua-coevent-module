@@ -190,6 +190,7 @@ static void be_connect(void *data, int fd)
             lua_pushstring(cok->L, "Connect error!(unknow)");
         }
 
+        cok->status = 0;
         cok->inuse = 0;
 
         lua_co_resume(cok->L, 2);
