@@ -1023,6 +1023,135 @@ static int lua_co_tcp(lua_State *L)
     return 1;
 }
 
+static int lua_co_dup_setpeername(lua_State *L)
+{
+    if(!lua_isuserdata(L, 1) || !lua_isstring(L, 2)) {
+        lua_pushnil(L);
+        lua_pushstring(L, "Error params!");
+        return 2;
+    }
+
+    cosocket_t *cok = (cosocket_t *) lua_touserdata(L, 1);
+
+    if(cok->fd > -1) {
+        se_delete(cok->ptr);
+        cok->ptr = NULL;
+        close(cok->fd);
+    }
+
+    if(lua_isnumber(L, 3)) {
+        int fd = 0, slen = sizeof(cok->addr);
+        bzero(&cok->addr, slen);
+        cok->addr.sin_family = AF_INET;
+        cok->addr.sin_port = htons(lua_tonumber(L, 3));
+        const char *host = lua_tostring(L, 2);
+
+        if(inet_aton(host, &cok->addr.sin_addr) == 0) {
+            struct hostent *hp = NULL;
+
+            if((hp = gethostbyname(host)) == 0) {
+                lua_pushnil(L);
+                lua_pushstring(L, "Nslookup Error!");
+                return 2;
+            }
+
+            memcpy(&cok->addr.sin_addr.s_addr, hp->h_addr, hp->h_length);
+        }
+
+        if((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
+            lua_pushnil(L);
+            lua_pushstring(L, "Connect Error!");
+            return 2;
+        }
+
+        if(!se_set_nonblocking(fd , 1)) {
+            close(fd);
+            lua_pushnil(L);
+            lua_pushstring(L, "Connect Error!");
+            return 2;
+        }
+
+        cok->ptr = se_add(_loop_fd, fd, cok);
+        cok->fd = fd;
+        cok->status = 2;
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int lua_co_udp_send(lua_State *L)
+{
+    if(!lua_isuserdata(L, 1) || !lua_isstring(L, 2)) {
+        lua_pushnil(L);
+        lua_pushstring(L, "Error params!");
+        return 2;
+    }
+
+    cosocket_t *cok = (cosocket_t *) lua_touserdata(L, 1);
+
+    if(cok->fd < 0) {
+        lua_pushnil(L);
+        lua_pushstring(L, "Not Connected!");
+        return 2;
+    }
+
+    size_t len = 0;
+    const char *buf = lua_tolstring(L, 2, &len);
+
+    if(sendto(cok->fd, buf, len, 0, (struct sockaddr *)&cok->addr, sizeof(cok->addr)) == -1) {
+        lua_pushnil(L);
+        lua_pushstring(L, "Send Error!");
+        return 2;
+    }
+
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+static const luaL_reg M_UDP[] = {
+    {"setpeername", lua_co_dup_setpeername},
+    {"send", lua_co_udp_send},
+
+    {"read", lua_co_read},
+    {"receive", lua_co_read},
+    {"settimeout", lua_co_settimeout},
+
+    {"close", lua_co_close},
+    {"__gc", lua_co_gc},
+
+    {NULL, NULL}
+};
+
+static int lua_co_udp(lua_State *L)
+{
+    cosocket_t *cok = (cosocket_t *) lua_newuserdata(L, sizeof(cosocket_t));
+
+    if(!cok) {
+        lua_pushnil(L);
+        lua_pushstring(L, "stack error!");
+        return 2;
+    }
+
+    bzero(cok, sizeof(cosocket_t));
+
+    if(lua_isboolean(L, 1) && lua_toboolean(L, 1) == 1) {
+        cok->use_ssl = 1;
+
+    } else {
+        cok->use_ssl = 0;
+    }
+
+    cok->L = L;
+    cok->fd = -1;
+    cok->timeout = 30000;
+    luaL_getmetatable(L, "cosocket:udp");
+    lua_setmetatable(L, -2);
+
+    return 1;
+}
+
 int swop_counter = 0;
 cosocket_swop_t *swop_top = NULL;
 cosocket_swop_t *swop_lat = NULL;
@@ -1152,6 +1281,7 @@ static int _do_other_jobs()
 
 static const struct luaL_reg cosocket_methods[] = {
     { "tcp", lua_co_tcp },
+    { "udp", lua_co_udp },
     { NULL, NULL }
 };
 
@@ -1275,9 +1405,15 @@ coroutine_resume=coroutine.resume");
     lua_pcall(L, 0, 0, 0);
 
     luaL_newmetatable(L, "cosocket:tcp");
-    //luaL_checkstack(L, 1, "not enough stack to register connection MT");
     lua_pushvalue(L, lua_upvalueindex(1));
     setfuncs(L, M, 1);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    lua_pop(L, 1);
+
+    luaL_newmetatable(L, "cosocket:udp");
+    lua_pushvalue(L, lua_upvalueindex(1));
+    setfuncs(L, M_UDP, 1);
     lua_pushvalue(L, -1);
     lua_setfield(L, -2, "__index");
     lua_pop(L, 1);

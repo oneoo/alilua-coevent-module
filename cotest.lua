@@ -247,6 +247,32 @@ local af = function()
 	
 end
 
+function test_udp_memcached()
+	print('start test_udp_memcached')
+	local sock = cosocket.udp()
+	local req = "\0\1\0\0\0\1\0\0flush_all\r\n"
+	if sock then
+		print('connected: ', sock:setpeername("localhost", 11211))
+		sock:settimeout(1000)  -- one second timeout
+		print('sended: ', sock:send(req))
+		print('sended: ', sock:send(req))
+		local data, err = sock:receive()
+		if not data then
+			print("failed to read a packet: ", err)
+		else
+			print('readed: ', #data, data)
+		end
+		local data, err = sock:receive()
+		if not data then
+			print("failed to read a packet: ", err)
+		else
+			print('readed: ', #data, data)
+		end
+	end
+	sock:close()
+	print('test_udp_memcached ended')
+end
+
 for u = 1,1 do
 	L(af)
 end
@@ -257,5 +283,7 @@ L(function()
 	local res,e = httprequest('https://www.upyun.com/index.html')
 	--local r,h,e = httprequest('http://www.163.com/index.html') print(r,h,e)
 	if res and res.header then print(res.body) for k,v in pairs(res.header) do print(k..':',v) end end
+
+	test_udp_memcached()
 end)
 print('end')
