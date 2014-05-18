@@ -14,7 +14,6 @@
 #include <fcntl.h>
 #include <sys/un.h>
 #include <inttypes.h>
-#include <zlib.h>
 #include <errno.h>
 //#include <openssl/sha.h>
 #include <openssl/ssl.h>
