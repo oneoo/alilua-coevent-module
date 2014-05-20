@@ -197,6 +197,77 @@ Sleeps without blocking.
 
 	sleep(1000) --1 second
 
+eio Directives
+---------
+###eio.open()
+**syntax:** fh = eio.open('/path/file', ['w|r|a'])
+
+Open a file, the mode specified in the string mode. It returns a new file descriptor, or, in case of errors, nil plus an error message.
+
+The mode string can be any of the following:
+
+* "r" read mode (the default);
+* "w" write mode;
+* "a" append mode;
+
+The following methods are supported on this object:
+
+* write
+* read
+* seek
+* sync
+* close
+
+###fh:write(data, [offset])
+
+###fh:read(length, [offset])
+
+###fh:seek(pos, 'cur|set|end')
+
+###fh:sync()
+
+###fh:close()
+
+###eio.mkdir('/path/target', [(int)mode])
+
+Attempts to create the directory specified by pathname.
+
+###eio.stat('/path/target')
+
+Gathers the statistics of the file named by filename.
+
+###eio.chown('/path/target', user, [group])
+
+Attempts to change the owner of the file filename to user|group. Only the superuser may change the owner of a file.
+
+###eio.chmod('/path/target', (int)mode)
+
+Attempts to change the mode of the specified file to that given in mode.
+
+###eio.unlink('/path/file')
+
+Deletes filename. Similar to the Unix C unlink() function.
+
+###eio.rmdir('/path/dir')
+
+Attempts to remove the directory named by dirname. The directory must be empty, and the relevant permissions must permit this.
+
+###eio.rename('/path/target', '/path/to')
+
+Attempts to rename oldname to newname, moving it between directories if necessary. If newname exists, it will be overwritten.
+
+###eio.readdir('/path/dir')
+
+Returns the name in the directory. The entries are returned in the order in which they are stored by the filesystem.
+
+###eio.isdir('/path/dir')
+
+Tells whether the given filename is a directory.
+
+###eio.isfile('/path/file')
+
+Tells whether the given file is a regular file.
+
 Other Directives
 ---------
 
