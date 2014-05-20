@@ -23,6 +23,7 @@ $(MODNAME).o:
 	[ -d objs ] || mkdir objs;
 	cd objs && $(CC) -g -fPIC -c ../merry/common/*.c;
 	cd objs && $(CC) -g -fPIC -c ../merry/se/*.c;
+	cd objs && $(CC) -g -fPIC -c ../merry/se/libeio/*.c;
 	cd objs && $(CC) -g -fPIC -c ../merry/*.c;
 	cd objs && $(CC) -g -fPIC -c ../src/*.c $(INCLUDES);
 

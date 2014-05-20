@@ -124,4 +124,6 @@ int lua_f_unescape_uri(lua_State *L);
 int lua_f_log(lua_State *L);
 int lua_f_open_log(lua_State *L);
 
+LUALIB_API int luaopen_eio(lua_State *L);
+
 #endif

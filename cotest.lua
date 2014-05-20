@@ -273,7 +273,52 @@ function test_udp_memcached()
 	print('test_udp_memcached ended')
 end
 
+function test_eio()
+	print('mkdir', eio.mkdir('/tmp/abc'))
+	print('mkdir2', eio.mkdir('/tmp/abc/a'))
+	local s,en,e = eio.stat('/tmp/abc')
+	print('stat', s, en, e)
+	if s then
+		for k,v in pairs(s) do
+			--print(k,v)
+		end
+	end
+	print('chown', eio.chown('/tmp/abc', 'dev'))
+	print('chmod', eio.chmod('/tmp/abc', 766))
+	print('unlink', eio.unlink('/tmp/abc'))
+	print('rename', eio.rename('/tmp/abc', '/tmp/aaa'))
+	print('mkdir3', eio.mkdir('/tmp/aaa/b'))
+	local s,en,e = eio.readdir('/tmp/aaa/')
+	print('readdir', s,en,e)
+	if s then for k,v in pairs(s) do
+		--print(k,v)
+	end end
+	print('isdir', eio.isdir('/tmp/aaa/a'))
+	print('isfile', eio.isfile('coevent.so'))
+	print('rmdir', eio.rmdir('/tmp/aaa/a'))
+	print('rmdir', eio.rmdir('/tmp/aaa/b'))
+	print('rmdir', eio.rmdir('/tmp/aaa'))
+
+	local f,en,e = eio.open('/tmp/a', 'w')
+	print('open', f,en,e)
+	if f then
+		print('write', f:write('abcdefghijklmn'))
+		print('write', f:write('abcdefghijklmn'))
+		print('sync', f:sync())
+		print('seek', f:seek(0, 'cur'))
+		print('seek', f:seek(2, 'set'))
+		print('seek', f:seek(0, 'cur'))
+		print('read', f:read(8))
+		print('seek', f:seek(0, 'end'))
+		print('read', f:read(8))
+		print('close', f:close())
+	end
+
+	print('unlink', eio.unlink('/tmp/a'))
+end
+
 for u = 1,1 do
+	L(test_eio)
 	L(af)
 end
 
@@ -286,4 +331,5 @@ L(function()
 
 	test_udp_memcached()
 end)
+
 print('end')

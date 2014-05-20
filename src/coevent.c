@@ -1347,6 +1347,7 @@ int luaopen_coevent(lua_State *L)
     lua_register(L, "longtime", lua_f_longtime);
     lua_register(L, "LOG", lua_f_log);
     lua_register(L, "open_log", lua_f_open_log);
+    luaopen_eio(L);
 
     luaL_loadstring(L, " \
 DEBUG,INFO,NOTICE,WARN,ALERT,ERR = 1,2,3,4,5,6 \
