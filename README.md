@@ -268,6 +268,10 @@ Tells whether the given filename is a directory.
 
 Tells whether the given file is a regular file.
 
+###eio.exists('/path/to')
+
+Tells whether the given file is exists. return file type: [dir|file].
+
 Other Directives
 ---------
 

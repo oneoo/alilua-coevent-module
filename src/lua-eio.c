@@ -217,6 +217,31 @@ static int eio_stat_isfile_cb(eio_req *req)
     return 0;
 }
 
+static int eio_stat_exists_cb(eio_req *req)
+{
+    lua_State *L = req->data;
+    struct stat *info = EIO_STAT_BUF(req);
+
+    if(EIO_RESULT(req) == 0) {
+        if(S_ISDIR(info->st_mode)) {
+            lua_pushstring(L, "dir");
+
+        } else {
+            lua_pushstring(L, "file");
+        }
+
+        lua_resume(L, 1);
+
+    } else {
+        lua_pushnil(L);
+        lua_pushnumber(L, req->errorno);
+        lua_pushstring(L, strerror(req->errorno));
+        lua_resume(L, 3);
+    }
+
+    return 0;
+}
+
 static int lua_f_eio_isdir(lua_State *L)
 {
     if(!lua_isstring(L, 1)) {
@@ -239,6 +264,19 @@ static int lua_f_eio_isfile(lua_State *L)
     }
 
     eio_stat(lua_tostring(L, 1), 0, eio_stat_isfile_cb, L);
+
+    return lua_yield(L, 0);
+}
+
+static int lua_f_eio_exists(lua_State *L)
+{
+    if(!lua_isstring(L, 1)) {
+        lua_pushnil(L);
+        lua_pushstring(L, "Error params!");
+        return 2;
+    }
+
+    eio_stat(lua_tostring(L, 1), 0, eio_stat_exists_cb, L);
 
     return lua_yield(L, 0);
 }
@@ -735,6 +773,7 @@ static const luaL_reg F[] = {
     {"readdir",             lua_f_eio_readdir},
     {"isdir",               lua_f_eio_isdir},
     {"isfile",              lua_f_eio_isfile},
+    {"exists",              lua_f_eio_exists},
 
     {"open",                lua_f_eio_open},
 

@@ -297,10 +297,13 @@ function test_eio()
 	print('isfile', eio.isfile('coevent.so'))
 	print('rmdir', eio.rmdir('/tmp/aaa/a'))
 	print('rmdir', eio.rmdir('/tmp/aaa/b'))
+	print('exists 1', eio.exists('/tmp/aaa'))
 	print('rmdir', eio.rmdir('/tmp/aaa'))
+	print('exists 2', eio.exists('/tmp/aaa'))
 
 	local f,en,e = eio.open('/tmp/a', 'w')
 	print('open', f,en,e)
+	print('exists 3', eio.exists('/tmp/a'))
 	if f then
 		print('write', f:write('abcdefghijklmn'))
 		print('write', f:write('abcdefghijklmn'))
