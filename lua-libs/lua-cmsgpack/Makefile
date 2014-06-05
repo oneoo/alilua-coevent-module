@@ -43,7 +43,7 @@ OBJS =              lua_cmsgpack.o
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CC) $(CMSGPACK_LDFLAGS) -o $@ $(OBJS) $(LIBLUA)
+	$(CC) $(CMSGPACK_LDFLAGS) $(LIBLUA) -o $@ $(OBJS)
 
 install: $(TARGET)
 	mkdir -p $(DESTDIR)/$(LUA_CMODULE_DIR)
