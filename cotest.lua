@@ -2,6 +2,7 @@ local L = require('coevent')
 local mysql = require "mysql"
 local cjson = require "cjson"
 local httprequest = (require "httpclient").httprequest
+local cmsgpack = require('cmsgpack')
 
 print('start')
 local db = mysql:new()

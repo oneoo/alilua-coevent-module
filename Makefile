@@ -31,6 +31,7 @@ $(MODNAME).o:
 	[ -f cjson.so ] || (cd lua-libs/lua-cjson-2.1.0 && make LIBLUA="$(LIBLUA)" && cp cjson.so ../../ && make clean);
 	[ -f zlib.so ] || (cd lua-libs/lzlib && make LIBLUA="$(LIBLUA)" && cp zlib.so ../../ && make clean && rm -rf *.o);
 	[ -f llmdb.so ] || (cd lua-libs/lightningmdb && make LIBLUA="$(LIBLUA)" && cp llmdb.so ../../ && make clean && rm -rf *.o);
+	[ -f cmsgpack.so ] || (cd lua-libs/lua-cmsgpack && make LIBLUA="$(LIBLUA)" && cp cmsgpack.so ../../ && make clean && rm -rf *.o);
 
 install:
 	`cd objs` && $(CC) -O3 objs/*.o -o objs/$(MODNAME).so -shared $(CFLAGS) $(LIBLUA);
