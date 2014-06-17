@@ -3,6 +3,8 @@ CC = gcc
 OPTIMIZATION = -O3
 CFLAGS = -lssl -lcrypto -lm -lpthread -lz
 
+INCLUDES=-I/usr/local/include -I/usr/local/include/luajit-2.0 -I/usr/local/include/luajit-2.1
+
 ifeq ($(LUAJIT),)
 ifeq ($(LUA),)
 LIBLUA = -llua -L/usr/lib
@@ -10,10 +12,12 @@ else
 LIBLUA = -L$(LUA) -llua -Wl,-rpath,$(LUA) -I$(LUA)/../include
 endif
 else
-LIBLUA = -L$(LUAJIT) -lluajit-5.1 -Wl,-rpath,$(LUAJIT) -I$(LUAJIT)/../include/luajit-2.0 -I$(LUAJIT)/../include/luajit-2.1
+LIBLUA = -L$(LUAJIT) -lluajit-5.1 -Wl,-rpath,$(LUAJIT) -I$(LUAJIT)/../include/luajit-2.0 -I$(LUAJIT)/../include/luajit-2.1 -I$(LUAJIT)
+ifneq (,$(wildcard $(LUAJIT)/libluajit.a))
+LIBLUA = $(LUAJIT)/libluajit.a -I$(LUAJIT)
+INCLUDES=-I$(LUAJIT)
 endif
-
-INCLUDES=-I/usr/local/include -I/usr/local/include/luajit-2.0 -I/usr/local/include/luajit-2.1
+endif
 
 all:$(MODNAME).o
 	$(CC) -o $(MODNAME).so -shared -fPIC $(LIBLUA) objs/*.o $(CFLAGS)
@@ -25,7 +29,7 @@ $(MODNAME).o:
 	cd objs && $(CC) -g -fPIC -c ../merry/se/*.c;
 	cd objs && $(CC) -g -fPIC -c ../merry/se/libeio/*.c;
 	cd objs && $(CC) -g -fPIC -c ../merry/*.c;
-	cd objs && $(CC) -g -fPIC -c ../src/*.c $(INCLUDES) $(LIBLUA);
+	cd objs && $(CC) -g -fPIC -c ../src/*.c $(INCLUDES);
 
 	[ -f bit.so ] || (cd lua-libs/LuaBitOp-1.0.2 && make LIBLUA="$(LIBLUA)" && cp bit.so ../../ && make clean);
 	[ -f cjson.so ] || (cd lua-libs/lua-cjson-2.1.0 && make LIBLUA="$(LIBLUA)" && cp cjson.so ../../ && make clean);
