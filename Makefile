@@ -25,7 +25,7 @@ $(MODNAME).o:
 	cd objs && $(CC) -g -fPIC -c ../merry/se/*.c;
 	cd objs && $(CC) -g -fPIC -c ../merry/se/libeio/*.c;
 	cd objs && $(CC) -g -fPIC -c ../merry/*.c;
-	cd objs && $(CC) -g -fPIC -c ../src/*.c $(INCLUDES);
+	cd objs && $(CC) -g -fPIC -c ../src/*.c $(INCLUDES) $(LIBLUA);
 
 	[ -f bit.so ] || (cd lua-libs/LuaBitOp-1.0.2 && make LIBLUA="$(LIBLUA)" && cp bit.so ../../ && make clean);
 	[ -f cjson.so ] || (cd lua-libs/lua-cjson-2.1.0 && make LIBLUA="$(LIBLUA)" && cp cjson.so ../../ && make clean);
