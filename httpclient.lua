@@ -353,7 +353,7 @@ function httprequest(url, params)
 	end
 	
 	if zlib and (gziped or deflated) then
-		if deflated then
+		if deflated and bodys[1]:byte(1) ~= 120 and bodys[1]:byte(1) ~= 156 then
 			bodys[1] = char(120,156) .. bodys[1]
 		end
 
