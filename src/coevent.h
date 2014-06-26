@@ -50,7 +50,7 @@ typedef struct {
     char z[2]; /// size align
 } cosocket_link_buf_t;
 
-#define _SENDBUF_SIZE 3905
+#define _SENDBUF_SIZE 3924
 typedef struct {
     int fd;
     uint8_t use_ssl;
@@ -60,15 +60,12 @@ typedef struct {
 
     SSL *ssl;
     SSL_CTX *ctx;
-    int status;
     void *ptr;
     lua_State *L;
     const u_char *send_buf;
-    u_char _send_buf[_SENDBUF_SIZE];// with size align / 60
     size_t send_buf_len;
     size_t send_buf_ed;
     u_char *send_buf_need_free;
-
 
     cosocket_link_buf_t *read_buf;
     cosocket_link_buf_t *last_buf;
@@ -76,15 +73,17 @@ typedef struct {
     size_t buf_read_len;
 
     size_t readed;
+    int status;
 
     int timeout;
     timeout_t *timeout_ptr;
     struct sockaddr_in addr;
     int pool_size;
-    unsigned long pool_key;
     int reusedtimes;
+    unsigned long pool_key;
 
     int inuse;
+    u_char _send_buf[_SENDBUF_SIZE];// with size align / 60
 } cosocket_t;
 
 int lua_co_resume(lua_State *L , int args);

@@ -292,7 +292,8 @@ static int lua_co_connect(lua_State *L)
         cok->buf_read_len = 0;
 
         /// check pool count
-        if(cok->pool_size > 0) {
+        //if(cok->pool_size > 0)
+        {
             cok->ptr = get_connection_in_pool(_loop_fd, cok->pool_key, cok);
 
             if(cok->ptr) {
@@ -309,7 +310,7 @@ static int lua_co_connect(lua_State *L)
 
             cosocket_connection_pool_counter_t *pool_counter = get_connection_pool_counter(cok->pool_key);
 
-            if(pool_counter->count >= cok->pool_size / _process_count) {
+            if(pool_counter->count > 0 && pool_counter->count >= cok->pool_size / _process_count) {
                 /// pool full
                 if((cok->pool_wait = add_waiting_get_connection(cok))) {
                     cok->status = 3;
