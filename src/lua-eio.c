@@ -18,7 +18,7 @@ static int eio_res_cb(eio_req *req)
         }
 
     } else {
-        printf("gc close\n");
+        //printf("gc close\n");
     }
 
     return 0;
