@@ -1314,8 +1314,14 @@ int lua_f_startloop(lua_State *L)
     return 0;
 }
 
+static void on_exit_handler()
+{
+    //some things
+}
+
 int luaopen_coevent(lua_State *L)
 {
+    attach_on_exit(on_exit_handler);
     LM = L;
     _loop_fd = -1;
 
