@@ -1285,10 +1285,16 @@ static const struct luaL_reg cosocket_methods[] = {
     { NULL, NULL }
 };
 
+static void on_exit_handler()
+{
+    //some things
+}
+
 int lua_f_startloop(lua_State *L)
 {
     if(_loop_fd == -1) {
         _loop_fd = se_create(4096);
+        attach_on_exit(on_exit_handler);
     }
 
     luaL_argcheck(L, lua_isfunction(L, 1)
@@ -1314,14 +1320,8 @@ int lua_f_startloop(lua_State *L)
     return 0;
 }
 
-static void on_exit_handler()
-{
-    //some things
-}
-
 int luaopen_coevent(lua_State *L)
 {
-    attach_on_exit(on_exit_handler);
     LM = L;
     _loop_fd = -1;
 
