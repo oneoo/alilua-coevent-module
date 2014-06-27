@@ -121,7 +121,6 @@ static int _be_connect(cosocket_t *cok, int fd, int yielded)
 {
     cok->fd = fd;
     cok->ptr = se_add(_loop_fd, fd, cok);
-    connection_pool_counter_operate(cok->pool_key, 1);
 
     cok->status = 2;
     cok->in_read_action = 0;
@@ -343,6 +342,7 @@ static int lua_co_connect(lua_State *L)
 
         if(fd != -2) {
             if(fd > -1) {
+                connection_pool_counter_operate(cok->pool_key, 1);
                 int ret = _be_connect(cok, fd, 0);
 
                 if(ret == -2) {
@@ -357,6 +357,8 @@ static int lua_co_connect(lua_State *L)
                 return 2;
             }
         }
+
+        connection_pool_counter_operate(cok->pool_key, 1);
     }
 
     return lua_yield(L, 0);
