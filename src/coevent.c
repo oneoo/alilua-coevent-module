@@ -350,6 +350,11 @@ static int lua_co_connect(lua_State *L)
                 }
 
                 return ret;
+
+            } else {
+                lua_pushnil(L);
+                lua_pushstring(L, strerror(errno));
+                return 2;
             }
         }
     }
