@@ -292,7 +292,12 @@ static int lua_co_connect(lua_State *L)
         cok->buf_read_len = 0;
 
         /// check pool count
-        //if(cok->pool_size > 0)
+        cosocket_connection_pool_counter_t *pool_counter = get_connection_pool_counter(cok->pool_key);
+
+        if(pool_counter->size > cok->pool_size){
+            cok->pool_size = pool_counter->size;
+        }
+        if(cok->pool_size > 0)
         {
             cok->ptr = get_connection_in_pool(_loop_fd, cok->pool_key, cok);
 
@@ -307,8 +312,6 @@ static int lua_co_connect(lua_State *L)
 
                 return 1;
             }
-
-            cosocket_connection_pool_counter_t *pool_counter = get_connection_pool_counter(cok->pool_key);
 
             if(pool_counter->count > 0 && pool_counter->count >= cok->pool_size / _process_count) {
                 /// pool full
@@ -842,7 +845,6 @@ static int _lua_co_close(lua_State *L, cosocket_t *cok)
 
     if(cok->fd > -1) {
         ((se_ptr_t *) cok->ptr)->fd = cok->fd;
-
         if(cok->pool_size < 1
            || add_connection_to_pool(_loop_fd, cok->pool_key, cok->pool_size, cok->ptr, cok->ssl,
                                      cok->ctx) == 0) {
@@ -938,6 +940,11 @@ int lua_co_setkeepalive(lua_State *L)
 
     } else if(cok->pool_size > 1000) {
         cok->pool_size = 1000;
+    }
+
+    cosocket_connection_pool_counter_t *pool_counter = get_connection_pool_counter(cok->pool_key);
+    if(cok->pool_size > pool_counter->size){
+        pool_counter->size = cok->pool_size;
     }
 
     if(lua_gettop(L) == 3 && lua_isstring(L, 3)) {

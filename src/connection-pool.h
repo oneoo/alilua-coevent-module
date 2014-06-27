@@ -2,7 +2,8 @@
 #define _CONNECTION_POOL_H
 
 typedef struct {
-    long     count;
+    unsigned long size;
+    unsigned long count;
     unsigned long pool_key;
     void   *next;
     void   *uper;
@@ -13,6 +14,7 @@ typedef struct {
     void *next;
     void *uper;
     unsigned long k;
+    unsigned long z;
 } cosocket_waiting_get_connection_t;
 
 typedef struct {

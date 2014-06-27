@@ -67,10 +67,8 @@ cosocket_connection_pool_counter_t *get_connection_pool_counter(unsigned long po
 
     if(!n) {
         n = malloc(sizeof(cosocket_connection_pool_counter_t));
+        memset(n, 0, sizeof(cosocket_connection_pool_counter_t));
         n->pool_key = pool_key;
-        n->count = 0;
-        n->next = NULL;
-        n->uper = NULL;
 
         if(cosocket_connection_pool_counters[k] == NULL) {    // at top
             cosocket_connection_pool_counters[k] = n;
