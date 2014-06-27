@@ -46,10 +46,9 @@ static int cosocket_be_close(se_ptr_t *ptr)
     }
 
     connection_pool_counter_operate(n->pool_key, -1);
+    close(fd);
 
     free(n);
-
-    close(fd);
 
     return 1;
 }
@@ -192,8 +191,8 @@ se_ptr_t *get_connection_in_pool(int loop_fd, unsigned long pool_key, cosocket_t
             } else {
                 int fd = ptr->fd;
                 se_delete(ptr);
-                close(fd);
                 connection_pool_counter_operate(m->pool_key, -1);
+                close(fd);
                 free(m);
             }
         }

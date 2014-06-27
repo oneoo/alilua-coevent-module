@@ -49,9 +49,13 @@ static void timeout_handle(void *ptr)
     {
         se_delete(cok->ptr);
         cok->ptr = NULL;
-        close(cok->fd);
-        connection_pool_counter_operate(cok->pool_key, -1);
-        cok->fd = -1;
+
+        if(cok->fd > -1) {
+            connection_pool_counter_operate(cok->pool_key, -1);
+            close(cok->fd);
+            cok->fd = -1;
+        }
+
         cok->status = 0;
     }
 
@@ -861,7 +865,9 @@ static int _lua_co_close(lua_State *L, cosocket_t *cok)
                                      cok->ctx) == 0) {
             se_delete(cok->ptr);
             cok->ptr = NULL;
+
             connection_pool_counter_operate(cok->pool_key, -1);
+            close(cok->fd);
 
             if(cok->ssl) {
                 SSL_CTX_free(cok->ctx);
@@ -869,8 +875,6 @@ static int _lua_co_close(lua_State *L, cosocket_t *cok)
                 SSL_free(cok->ssl);
                 cok->ssl = NULL;
             }
-
-            close(cok->fd);
         }
 
         cok->ssl = NULL;
