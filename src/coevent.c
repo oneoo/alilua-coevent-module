@@ -38,7 +38,12 @@ static void timeout_handle(void *ptr)
         }
 
     } else {
-        lua_pushstring(cok->L, "Timeout!");
+        if(cok->status == 3) {
+            lua_pushstring(cok->L, "Connect error!(wait pool timeout)");
+
+        } else {
+            lua_pushstring(cok->L, "Timeout!");
+        }
     }
 
     {
@@ -330,7 +335,7 @@ static int lua_co_connect(lua_State *L)
             }
         }
 
-        int fd = se_connect(_loop_fd, host, port, cok->timeout > 0 ? cok->timeout : 30, be_connect, cok);
+        int fd = se_connect(_loop_fd, host, port, cok->timeout > 0 ? cok->timeout : 30000, be_connect, cok);
 
         if(fd != -2) {
             if(fd > -1) {
