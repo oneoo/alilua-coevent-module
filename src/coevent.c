@@ -262,8 +262,8 @@ static int lua_co_connect(lua_State *L)
                 if(cok->pool_size < 0) {
                     cok->pool_size = 0;
 
-                } else if(cok->pool_size > 1000) {
-                    cok->pool_size = 1000;
+                } else if(cok->pool_size > 4096) {
+                    cok->pool_size = 4096;
                 }
 
                 pn++;
@@ -321,6 +321,11 @@ static int lua_co_connect(lua_State *L)
                     //printf("wait %d\n", cok->fd);
                     cok->inuse = 1;
                     return lua_yield(L, 0);
+
+                } else {
+                    lua_pushnil(L);
+                    lua_pushstring(L, "pool error");
+                    return 2;
                 }
             }
         }
@@ -939,8 +944,8 @@ int lua_co_setkeepalive(lua_State *L)
     if(cok->pool_size < 0) {
         cok->pool_size = 0;
 
-    } else if(cok->pool_size > 1000) {
-        cok->pool_size = 1000;
+    } else if(cok->pool_size > 4096) {
+        cok->pool_size = 4096;
     }
 
     cosocket_connection_pool_counter_t *pool_counter = get_connection_pool_counter(cok->pool_key);

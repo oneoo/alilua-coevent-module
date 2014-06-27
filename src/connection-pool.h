@@ -27,8 +27,7 @@ typedef struct {
     int z;
 } cosocket_connection_pool_t;
 
-cosocket_connection_pool_counter_t *get_connection_pool_counter(
-    unsigned long pool_key);
+cosocket_connection_pool_counter_t *get_connection_pool_counter(unsigned long pool_key);
 
 void connection_pool_counter_operate(unsigned long pool_key, int a);
 void *add_waiting_get_connection(cosocket_t *cok);
