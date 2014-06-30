@@ -10,11 +10,11 @@ static int eio_res_cb(eio_req *req)
             lua_pushnil(L);
             lua_pushnumber(L, req->errorno);
             lua_pushstring(L, strerror(req->errorno));
-            lua_resume(L, 3);
+            lua_co_resume(L, 3);
 
         } else {
             lua_pushboolean(L, 1);
-            lua_resume(L, 1);
+            lua_co_resume(L, 1);
         }
 
     } else {
@@ -34,7 +34,7 @@ static int eio_readdir_cb(eio_req *req)
         char *buf = (char *)EIO_BUF(req);
 
         if(EIO_RESULT(req) < 0) {
-            lua_resume(L, 0);
+            lua_co_resume(L, 0);
             return 0;
         }
 
@@ -44,13 +44,13 @@ static int eio_readdir_cb(eio_req *req)
             lua_rawseti(L, -2, i++);
         }
 
-        lua_resume(L, 1);
+        lua_co_resume(L, 1);
 
     } else {
         lua_pushnil(L);
         lua_pushnumber(L, req->errorno);
         lua_pushstring(L, strerror(req->errorno));
-        lua_resume(L, 3);
+        lua_co_resume(L, 3);
     }
 
     return 0;
@@ -167,13 +167,13 @@ static int eio_stat_cb(eio_req *req)
         lua_pushnumber(L, (lua_Number)info->st_size);
         lua_rawset(L, -3);
 
-        lua_resume(L, 1);
+        lua_co_resume(L, 1);
 
     } else {
         lua_pushnil(L);
         lua_pushnumber(L, req->errorno);
         lua_pushstring(L, strerror(req->errorno));
-        lua_resume(L, 3);
+        lua_co_resume(L, 3);
     }
 
     return 0;
@@ -186,13 +186,13 @@ static int eio_stat_isdir_cb(eio_req *req)
 
     if(EIO_RESULT(req) == 0) {
         lua_pushboolean(L, S_ISDIR(info->st_mode));
-        lua_resume(L, 1);
+        lua_co_resume(L, 1);
 
     } else {
         lua_pushnil(L);
         lua_pushnumber(L, req->errorno);
         lua_pushstring(L, strerror(req->errorno));
-        lua_resume(L, 3);
+        lua_co_resume(L, 3);
     }
 
     return 0;
@@ -205,13 +205,13 @@ static int eio_stat_isfile_cb(eio_req *req)
 
     if(EIO_RESULT(req) == 0) {
         lua_pushboolean(L, S_ISREG(info->st_mode));
-        lua_resume(L, 1);
+        lua_co_resume(L, 1);
 
     } else {
         lua_pushnil(L);
         lua_pushnumber(L, req->errorno);
         lua_pushstring(L, strerror(req->errorno));
-        lua_resume(L, 3);
+        lua_co_resume(L, 3);
     }
 
     return 0;
@@ -230,13 +230,13 @@ static int eio_stat_exists_cb(eio_req *req)
             lua_pushstring(L, "file");
         }
 
-        lua_resume(L, 1);
+        lua_co_resume(L, 1);
 
     } else {
         lua_pushnil(L);
         lua_pushnumber(L, req->errorno);
         lua_pushstring(L, strerror(req->errorno));
-        lua_resume(L, 3);
+        lua_co_resume(L, 3);
     }
 
     return 0;
@@ -516,13 +516,13 @@ static int eio_read_cb(eio_req *req)
 
     if(rc >= 0) {
         lua_pushlstring(L, EIO_BUF(req), rc);
-        lua_resume(L, 1);
+        lua_co_resume(L, 1);
 
     } else {
         lua_pushnil(L);
         lua_pushnumber(L, req->errorno);
         lua_pushstring(L, strerror(req->errorno));
-        lua_resume(L, 3);
+        lua_co_resume(L, 3);
     }
 
     return 0;
@@ -607,11 +607,11 @@ static int eio_seek_cb(eio_req *req)
         lua_pushnil(L);
         lua_pushnumber(L, req->errorno);
         lua_pushstring(L, strerror(req->errorno));
-        lua_resume(L, 3);
+        lua_co_resume(L, 3);
 
     } else {
         lua_pushnumber(L, req->offs);
-        lua_resume(L, 1);
+        lua_co_resume(L, 1);
     }
 
     return 0;
@@ -703,20 +703,20 @@ static int eio_open_cb(eio_req *req)
         if(!efd) {
             lua_pushnil(L);
             lua_pushstring(L, "stack error!");
-            lua_resume(L, 2);
+            lua_co_resume(L, 2);
         }
 
         *efd = fd;
 
         luaL_getmetatable(L, "eio:fh");
         lua_setmetatable(L, -2);
-        lua_resume(L, 1);
+        lua_co_resume(L, 1);
 
     } else {
         lua_pushnil(L);
         lua_pushnumber(L, req->errorno);
         lua_pushstring(L, strerror(req->errorno));
-        lua_resume(L, 3);
+        lua_co_resume(L, 3);
     }
 
     return 0;
