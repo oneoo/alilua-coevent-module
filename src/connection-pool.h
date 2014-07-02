@@ -22,8 +22,9 @@ typedef struct {
     unsigned long pool_key;
     void *next;
     void *uper;
-    void *ssl;
     void *ctx;
+    void *ssl;
+    char *ssl_pw;
     int z;
 } cosocket_connection_pool_t;
 
@@ -33,7 +34,8 @@ void connection_pool_counter_operate(unsigned long pool_key, int a);
 void *add_waiting_get_connection(cosocket_t *cok);
 void delete_in_waiting_get_connection(void *_n);
 
-se_ptr_t *get_connection_in_pool(int loop_fd, unsigned long pool_key,
-                                 cosocket_t *cok);
+se_ptr_t *get_connection_in_pool(int loop_fd, unsigned long pool_key, cosocket_t *cok);
+int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size, se_ptr_t *ptr, void *ssl, void *ctx,
+                           char *ssl_pw);
 
 #endif // _CONNECTION_POOL_H

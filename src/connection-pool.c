@@ -39,10 +39,10 @@ static int cosocket_be_close(se_ptr_t *ptr)
     n->ptr = NULL;
 
     if(n->ssl) {
-        SSL_CTX_free(n->ctx);
-        n->ctx = NULL;
         SSL_free(n->ssl);
         n->ssl = NULL;
+        SSL_CTX_free(n->ctx);
+        n->ctx = NULL;
     }
 
     connection_pool_counter_operate(n->pool_key, -1);
@@ -239,8 +239,17 @@ regetfd:
         ptr = n->ptr;
 
         if(cok) {
-            cok->ssl = n->ssl;
+            if(cok->ctx) {
+                SSL_CTX_free(cok->ctx);
+            }
+
+            if(cok->ssl_pw) {
+                free(cok->ssl_pw);
+            }
+
             cok->ctx = n->ctx;
+            cok->ssl = n->ssl;
+            cok->ssl_pw = n->ssl_pw;
         }
 
         free(n);
@@ -256,7 +265,8 @@ regetfd:
     return NULL;
 }
 
-int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size, se_ptr_t *ptr, void *ssl, void *ctx)
+int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size, se_ptr_t *ptr, void *ssl, void *ctx,
+                           char *ssl_pw)
 {
     if(pool_key < 0 || !ptr || ptr->fd < 0) {
         return 0;
@@ -296,8 +306,9 @@ int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size, s
 
                 free(n);
 
-                _cok->ssl = ssl;
                 _cok->ctx = ctx;
+                _cok->ssl = ssl;
+                _cok->ssl_pw = ssl_pw;
                 _cok->ptr = ptr;
                 ptr->data = _cok;
                 _cok->fd = ptr->fd;
@@ -347,6 +358,7 @@ int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size, s
         m->ptr = ptr;
         m->pool_key = pool_key;
         m->ssl = ssl;
+        m->ssl_pw = ssl_pw;
         m->ctx = ctx;
         m->next = NULL;
         m->uper = NULL;

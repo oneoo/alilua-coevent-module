@@ -50,7 +50,7 @@ typedef struct {
     char z[2]; /// size align
 } cosocket_link_buf_t;
 
-#define _SENDBUF_SIZE 3924
+#define _SENDBUF_SIZE 3908
 typedef struct {
     int fd;
     uint8_t use_ssl;
@@ -58,8 +58,10 @@ typedef struct {
 
     void *pool_wait;
 
-    SSL *ssl;
     SSL_CTX *ctx;
+    char *ssl_pw;
+    unsigned long ssl_sign;
+    SSL *ssl;
     void *ptr;
     lua_State *L;
     const u_char *send_buf;
@@ -94,8 +96,6 @@ int cosocket_be_write(se_ptr_t *ptr);
 int cosocket_be_read(se_ptr_t *ptr);
 
 int tcp_connect(const char *host, int port, cosocket_t *cok, int loop_fd, int *ret);
-int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size,
-                           se_ptr_t *ptr, void *ssl, void *ctx);
 
 int coevnet_module_do_other_jobs();
 

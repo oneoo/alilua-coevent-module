@@ -61,10 +61,10 @@ static void timeout_handle(void *ptr)
 
     if(cok->ssl) {
         SSL_shutdown(cok->ssl);
-        SSL_CTX_free(cok->ctx);
-        cok->ctx = NULL;
         SSL_free(cok->ssl);
         cok->ssl = NULL;
+        SSL_CTX_free(cok->ctx);
+        cok->ctx = NULL;
     }
 
     cok->inuse = 0;
@@ -117,6 +117,25 @@ int cosocket_be_ssl_connected(se_ptr_t *ptr)
     return 0;
 }
 
+static int ssl_password_cb(char *buf, int num, int rwflag, void *userdata)
+{
+    char *pemPasswd;
+    static char empty_pw[] = "\0";
+
+    pemPasswd = (char *)userdata;
+
+    if(pemPasswd == NULL) {
+        pemPasswd = empty_pw;
+    }
+
+    if(num < strlen(pemPasswd) + 1) {
+        return 0;
+    }
+
+    strcpy(buf, pemPasswd);
+    return(strlen(pemPasswd));
+}
+
 static int _be_connect(cosocket_t *cok, int fd, int yielded)
 {
     cok->fd = fd;
@@ -126,19 +145,21 @@ static int _be_connect(cosocket_t *cok, int fd, int yielded)
     cok->in_read_action = 0;
 
     if(cok->use_ssl) {
-        cok->ctx = SSL_CTX_new(SSLv23_client_method());
-
         if(cok->ctx == NULL) {
-            se_delete(cok->ptr);
-            close(cok->fd);
+            cok->ctx = SSL_CTX_new(SSLv23_client_method());
 
-            cok->ptr = NULL;
-            cok->fd = -1;
-            cok->status = 0;
+            if(cok->ctx == NULL) {
+                se_delete(cok->ptr);
+                close(cok->fd);
 
-            lua_pushnil(cok->L);
-            lua_pushstring(cok->L, "ssl error: no context");
-            return 2;
+                cok->ptr = NULL;
+                cok->fd = -1;
+                cok->status = 0;
+
+                lua_pushnil(cok->L);
+                lua_pushstring(cok->L, "SSL_CTX_new Error");
+                return 2;
+            }
         }
 
         cok->ssl = SSL_new(cok->ctx);
@@ -155,7 +176,7 @@ static int _be_connect(cosocket_t *cok, int fd, int yielded)
             cok->ctx = NULL;
 
             lua_pushnil(cok->L);
-            lua_pushstring(cok->L, "ssl error: no context");
+            lua_pushstring(cok->L, "SSL_new Error");
             return 2;
         }
 
@@ -287,8 +308,8 @@ static int lua_co_connect(lua_State *L)
             }
         }
 
-        if(cok->pool_key == 0) {    /// create a normal key
-            int len = sprintf(temp_buf, "%s%s:%d", port > 0 ? "tcp://" : "unix://", host, port);
+        if(cok->pool_key == 0) { /// create a normal key
+            int len = snprintf(temp_buf, 4096, "%s%s:%d:%ld", port > 0 ? "tcp://" : "unix://", host, port, cok->ssl_sign);
             cok->pool_key = fnv1a_32(temp_buf, len);
         }
 
@@ -869,7 +890,7 @@ static int _lua_co_close(lua_State *L, cosocket_t *cok)
 
         if(cok->pool_size < 1
            || add_connection_to_pool(_loop_fd, cok->pool_key, cok->pool_size, cok->ptr, cok->ssl,
-                                     cok->ctx) == 0) {
+                                     cok->ctx, cok->ssl_pw) == 0) {
             se_delete(cok->ptr);
             cok->ptr = NULL;
 
@@ -877,15 +898,25 @@ static int _lua_co_close(lua_State *L, cosocket_t *cok)
             close(cok->fd);
 
             if(cok->ssl) {
-                SSL_CTX_free(cok->ctx);
-                cok->ctx = NULL;
                 SSL_free(cok->ssl);
                 cok->ssl = NULL;
             }
+
+            if(cok->ctx) {
+                SSL_CTX_free(cok->ctx);
+                cok->ctx = NULL;
+            }
+
+            if(cok->ssl_pw) {
+                free(cok->ssl_pw);
+                cok->ssl_pw = NULL;
+            }
+
         }
 
         cok->ssl = NULL;
         cok->ctx = NULL;
+        cok->ssl_pw = NULL;
 
         cok->ptr = NULL;
         cok->fd = -1;
@@ -1030,7 +1061,70 @@ static int lua_co_tcp(lua_State *L)
 
     bzero(cok, sizeof(cosocket_t));
 
-    if(lua_isboolean(L, 1) && lua_toboolean(L, 1) == 1) {
+    if(lua_isstring(L, 1) && lua_isstring(L, 2)) {
+        if(cok->ctx) {
+            SSL_CTX_free(cok->ctx);
+        }
+
+        cok->ctx = SSL_CTX_new(SSLv23_client_method());
+
+        if(cok->ctx == NULL) {
+            lua_pushnil(cok->L);
+            lua_pushstring(cok->L, "SSL_CTX_new Error");
+            return 2;
+        }
+
+        if(lua_isstring(L, 3)) {
+            if(cok->ssl_pw) {
+                free(cok->ssl_pw);
+            }
+
+            size_t len = 0;
+            const char *p1 = lua_tolstring(L, 3, &len);
+            cok->ssl_pw = malloc(len + 1);
+
+            if(cok->ssl_pw) {
+                memcpy(cok->ssl_pw, p1, len);
+                cok->ssl_pw[len] = '\0';
+                SSL_CTX_set_default_passwd_cb_userdata(cok->ctx, (void *)cok->ssl_pw);
+                SSL_CTX_set_default_passwd_cb(cok->ctx, ssl_password_cb);
+            }
+
+            int l = snprintf(temp_buf, 4096, "%s:%s:%s", lua_tostring(L, 1), lua_tostring(L, 1), p1);
+            cok->ssl_sign = fnv1a_32(temp_buf, l);
+
+        } else {
+            int l = snprintf(temp_buf, 4096, "%s:%s:", lua_tostring(L, 1), lua_tostring(L, 1));
+            cok->ssl_sign = fnv1a_32(temp_buf, l);
+        }
+
+        if(SSL_CTX_use_certificate_file(cok->ctx, lua_tostring(L, 1), SSL_FILETYPE_PEM) != 1) {
+            SSL_CTX_free(cok->ctx);
+            cok->ctx = NULL;
+            lua_pushnil(cok->L);
+            lua_pushstring(cok->L, "SSL_CTX_use_certificate_file Error");
+            return 2;
+        }
+
+        if(SSL_CTX_use_PrivateKey_file(cok->ctx, lua_tostring(L, 2), SSL_FILETYPE_PEM) != 1) {
+            SSL_CTX_free(cok->ctx);
+            cok->ctx = NULL;
+            lua_pushnil(cok->L);
+            lua_pushstring(cok->L, "SSL_CTX_use_PrivateKey_file Error");
+            return 2;
+        }
+
+        if(!SSL_CTX_check_private_key(cok->ctx)) {
+            SSL_CTX_free(cok->ctx);
+            cok->ctx = NULL;
+            lua_pushnil(cok->L);
+            lua_pushstring(cok->L, "SSL_CTX_check_private_key Error");
+            return 2;
+        }
+
+        cok->use_ssl = 1;
+
+    } else if(lua_isboolean(L, 1) && lua_toboolean(L, 1) == 1) {
         cok->use_ssl = 1;
 
     } else {
