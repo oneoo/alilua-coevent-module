@@ -138,6 +138,9 @@ static int ssl_password_cb(char *buf, int num, int rwflag, void *userdata)
 
 static int _be_connect(cosocket_t *cok, int fd, int yielded)
 {
+    int flag = 1;
+    int ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(flag));
+    
     cok->fd = fd;
     cok->ptr = se_add(_loop_fd, fd, cok);
 
