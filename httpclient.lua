@@ -384,6 +384,8 @@ function httprequest(url, params)
 		if i then
 			local e = headers[1]:find(' ', i+1, true)
 			res.status = e and tonumber(headers[1]:sub(i+1, e)) or 0
+		else
+			res.status = 0
 		end
 
 		local header = {}
