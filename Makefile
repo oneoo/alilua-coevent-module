@@ -37,6 +37,7 @@ $(MODNAME).o:
 	[ -f llmdb.so ] || (cd lua-libs/lightningmdb && make LIBLUA="$(LIBLUA)" && cp llmdb.so ../../ && make clean && rm -rf *.o);
 	[ -f cmsgpack.so ] || (cd lua-libs/lua-cmsgpack && make LIBLUA="$(LIBLUA)" && cp cmsgpack.so ../../ && make clean && rm -rf *.o);
 	[ -f monip.so ] || (cd lua-libs/lua-monip && make LIBLUA="$(LIBLUA)" && cp monip.so ../../ && make clean && rm -rf *.o);
+	[ -f crc32.so ] || (cd lua-libs/lua-crc32 && make LIBLUA="$(LIBLUA)" && cp crc32.so ../../ && make clean && rm -rf *.o);
 
 install:
 	`cd objs` && $(CC) -O3 objs/*.o -o objs/$(MODNAME).so -shared $(CFLAGS) $(LIBLUA);
