@@ -140,7 +140,7 @@ static int _be_connect(cosocket_t *cok, int fd, int yielded)
 {
     int flag = 1;
     int ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(flag));
-    
+
     cok->fd = fd;
     cok->ptr = se_add(_loop_fd, fd, cok);
 
@@ -152,6 +152,7 @@ static int _be_connect(cosocket_t *cok, int fd, int yielded)
             cok->ctx = SSL_CTX_new(SSLv23_client_method());
 
             if(cok->ctx == NULL) {
+                connection_pool_counter_operate(cok->pool_key, -1);
                 se_delete(cok->ptr);
                 close(cok->fd);
 
@@ -168,6 +169,7 @@ static int _be_connect(cosocket_t *cok, int fd, int yielded)
         cok->ssl = SSL_new(cok->ctx);
 
         if(cok->ssl == NULL) {
+            connection_pool_counter_operate(cok->pool_key, -1);
             se_delete(cok->ptr);
             close(cok->fd);
 
@@ -210,6 +212,8 @@ static void be_connect(void *data, int fd)
     cosocket_t *cok = data;
 
     if(fd < 0) {
+        connection_pool_counter_operate(cok->pool_key, -1);
+
         lua_pushnil(cok->L);
 
         if(se_errno == SE_DNS_QUERY_TIMEOUT) {

@@ -399,7 +399,7 @@ function httprequest(url, params)
 		res.header = header
 	end
 
-	return res, rterr
+	return res, rterr or err
 end
 
 local class_mt = {
