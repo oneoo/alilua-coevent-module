@@ -18,7 +18,6 @@ local mt = { __index = _M }
 
 function _M.new(self, path)
     local e = nil
-    local n = ceil(time()/60)%3 +1
 
     if not e then
         e = llmdb.env_create()
