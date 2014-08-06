@@ -1435,7 +1435,7 @@ int lua_f_startloop(lua_State *L)
     lua_pushvalue(L, 1);    /* move function to top */
     lua_xmove(L, job_L, 1);    /* move function from L to job_L */
 
-    if(lua_resume(job_L, 0) != LUA_YIELD && lua_isstring(job_L, -1)) {
+    if(lua_resume(job_L, 0) == LUA_ERRRUN && lua_isstring(job_L, -1)) {
         luaL_error(L, lua_tostring(job_L, -1));
         lua_pop(job_L, -1);
     }
