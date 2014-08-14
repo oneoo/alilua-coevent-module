@@ -6,17 +6,39 @@ CFLAGS = -lssl -lcrypto -lm -lpthread -lz
 INCLUDES=-I/usr/local/include -I/usr/local/include/luajit-2.0 -I/usr/local/include/luajit-2.1
 
 ifeq ($(LUAJIT),)
-ifeq ($(LUA),)
-LIBLUA = -llua -L/usr/lib
+	ifeq ($(LUA),)
+	LIBLUA = -llua -L/usr/lib
+	LUABIN = /usr/local/bin/lua
+	else
+	LIBLUA = -L$(LUA) -llua -Wl,-rpath,$(LUA) -I$(LUA)/../include
+	endif
+
+	ifneq ("$(wildcard $(LUA)/lua)","")
+	LUABIN = $(LUA)/lua
+	endif
+	ifneq ("$(wildcard $(LUA)/../bin/lua)","")
+	LUABIN = $(LUA)/../bin/lua
+	endif
 else
-LIBLUA = -L$(LUA) -llua -Wl,-rpath,$(LUA) -I$(LUA)/../include
-endif
-else
-LIBLUA = -L$(LUAJIT) -lluajit-5.1 -Wl,-rpath,$(LUAJIT) -I$(LUAJIT)/../include/luajit-2.0 -I$(LUAJIT)/../include/luajit-2.1 -I$(LUAJIT)
-ifneq (,$(wildcard $(LUAJIT)/libluajit.a))
-LIBLUA = $(LUAJIT)/libluajit.a -I$(LUAJIT)
-INCLUDES=-I$(LUAJIT)
-endif
+	LIBLUA = -L$(LUAJIT) -lluajit-5.1 -Wl,-rpath,$(LUAJIT) -I$(LUAJIT)/../include/luajit-2.0 -I$(LUAJIT)/../include/luajit-2.1 -I$(LUAJIT)
+	ifneq (,$(wildcard $(LUAJIT)/libluajit.a))
+	LIBLUA = $(LUAJIT)/libluajit.a -I$(LUAJIT)
+	INCLUDES=-I$(LUAJIT)
+	endif
+
+	ifneq ("$(wildcard $(LUAJIT)/luajit)","")
+	LUABIN = $(LUAJIT)/luajit
+	endif
+	ifneq ("$(wildcard $(LUAJIT)/../bin/luajit)","")
+	LUABIN = $(LUAJIT)/../bin/luajit
+	endif
+	ifneq ("$(wildcard $(LUAJIT)/luajit-2.1.0-alpha)","")
+	LUABIN = $(LUAJIT)/luajit-2.1.0-alpha
+	endif
+	ifneq ("$(wildcard $(LUAJIT)/../bin/luajit-2.1.0-alpha)","")
+	LUABIN = $(LUAJIT)/../bin/luajit-2.1.0-alpha
+	endif
+
 endif
 
 all:$(MODNAME).o
@@ -41,12 +63,13 @@ $(MODNAME).o:
 
 install:
 	`cd objs` && $(CC) -O3 objs/*.o -o objs/$(MODNAME).so -shared $(CFLAGS) $(LIBLUA);
-	cp objs/*.so `lua installpath.lua .so`;
-	cp *.so `lua installpath.lua .so`;
-	cp mysql.lua `lua installpath.lua .lua`;
-	cp redis.lua `lua installpath.lua .lua`;
-	cp memcached.lua `lua installpath.lua .lua`;
-	cp httpclient.lua `lua installpath.lua .lua`;
+	cp objs/*.so `$(LUABIN) installpath.lua .so`;
+	cp *.so `$(LUABIN) installpath.lua .so`;
+	cp mysql.lua `$(LUABIN) installpath.lua .lua`;
+	cp redis.lua `$(LUABIN) installpath.lua .lua`;
+	cp memcached.lua `$(LUABIN) installpath.lua .lua`;
+	cp httpclient.lua `$(LUABIN) installpath.lua .lua`;
+	cp llmdb-client.lua `$(LUABIN) installpath.lua .lua`;
 	rm objs/*.so;
 
 clean:
