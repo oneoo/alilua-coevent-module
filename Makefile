@@ -20,10 +20,17 @@ ifeq ($(LUAJIT),)
 	LUABIN = $(LUA)/../bin/lua
 	endif
 else
-	LIBLUA = -L$(LUAJIT) -lluajit-5.1 -Wl,-rpath,$(LUAJIT) -I$(LUAJIT)/../include/luajit-2.0 -I$(LUAJIT)/../include/luajit-2.1 -I$(LUAJIT)
 	ifneq (,$(wildcard $(LUAJIT)/libluajit.a))
 	LIBLUA = $(LUAJIT)/libluajit.a -I$(LUAJIT)
 	INCLUDES=-I$(LUAJIT)
+	else ifneq (,$(wildcard $(LUAJIT)/src/libluajit.a))
+	LIBLUA = $(LUAJIT)/src/libluajit.a -I$(LUAJIT)/src
+	INCLUDES=-I$(LUAJIT)/src
+	else ifneq (,$(wildcard $(LUAJIT)/lib/libluajit-5.1.a))
+	LIBLUA = $(LUAJIT)/lib/libluajit-5.1.a -I$(LUAJIT)/include/luajit-2.0
+	INCLUDES=-I$(LUAJIT)/include/luajit-2.0
+	else
+	LIBLUA = -L$(LUAJIT) -lluajit-5.1 -Wl,-rpath,$(LUAJIT) -I$(LUAJIT)/../include/luajit-2.0 -I$(LUAJIT)/../include/luajit-2.1 -I$(LUAJIT)
 	endif
 
 	ifneq ("$(wildcard $(LUAJIT)/luajit)","")
