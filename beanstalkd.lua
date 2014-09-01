@@ -14,7 +14,7 @@ end
 
 local _M = {}
 
-_M.VERSION = "0.03"
+_M.VERSION = "0.04"
 
 local mt = {
     __index = _M,
@@ -89,7 +89,6 @@ function _M.watch(self, tube)
     if not line then
         return nil, "failed to watch tube, receive data error: " .. err
     end
-
     local size = strmatch(line, "^WATCHING (%d+)$")
     if size then
         return size, line
@@ -114,7 +113,6 @@ function _M.put(self, body, pri, delay, ttr)
     if not line then
         return nil, "failed to put, receive data error:" .. err
     end
-
     local id = strmatch(line, " (%d+)$")
     if id then
         return id, line
@@ -156,11 +154,90 @@ function _M.reserve(self, timeout)
     if not line then
         return nil, "failed to reserve, receive data error: " .. err
     end
-
     local id, size = strmatch(line, "^RESERVED (%d+) (%d+)$")
     if id and size then -- remove \r\n
         local data, err = sock:receive(size+2)
-        return id, strsub(data, 1, strlen(data)-2)
+        return id, strsub(data, 1, -3)
+    end
+    return false, line
+end
+
+function _M.release(self, id, pri, delay)
+    local sock = self.sock
+    if not sock then
+        return nil, "not initialized"
+    end
+    pri = pri or 2 ^ 32
+    delay = delay or 0
+    local cmd = {"release", " ", id, " ", pri, " ", delay, "\r\n"}
+    local bytes, err = sock:send(tabconcat(cmd))
+    if not bytes then
+        return nil, "failed to release, send data error: " .. err
+    end
+    local line, err = sock:receive()
+    if not line then
+        return nil, "failed to release, receive data error: " .. err
+    end
+    if line == "RELEASED" then
+        return true, line
+    end
+    return false, line
+end
+
+function _M.bury(self, id, pri)
+    local sock = self.sock
+    if not sock then
+        return nil, "not initialized"
+    end
+    pri = pri or 2 ^ 32
+    local cmd = {"bury", " ", id, " ", pri, "\r\n"}
+    local bytes, err = sock:send(tabconcat(cmd))
+    if not bytes then
+        return nil, "failed to release, send data error: " .. err
+    end
+    local line, err = sock:receive()
+    if not line then
+        return nil, "failed to release, receive data error: " .. err
+    end
+    if line == "BURIED" then
+        return true, line
+    end
+    return false, line
+end
+
+function _M.kick(self, bound)
+    local sock = self.sock
+    if not sock then
+        return nil, "not initialized"
+    end
+    local cmd = {"kick", " ", bound, "\r\n"}
+    local bytes, err = sock:send(tabconcat(cmd))
+    if not bytes then
+        return nil, "failed to release, send data error: " .. err
+    end
+    local line, err = sock:receive()
+    if not line then
+        return nil, "failed to release, receive data error: " .. err
+    end
+    local count = strmatch(line, "^KICKED (%d+)$")
+    return count, nil
+end
+
+function _M.peek(self, id)
+    local sock = self.sock
+    local cmd = {"peek", " ", id, "\r\n"}
+    local bytes, err = sock:send(tabconcat(cmd))
+    if not bytes then
+        return nil, "failed to peek, send data error: " .. err
+    end
+    local line, err = sock:receive()
+    if not line then
+        return nil, "failed to peek, receive data error: " .. err
+    end
+    local id, size = strmatch(line, "^FOUND (%d+) (%d+)$")
+    if id and size then -- remove \r\n
+        local data, err = sock:receive(size+2)
+        return id, strsub(data, 1, -3)
     end
     return false, line
 end
