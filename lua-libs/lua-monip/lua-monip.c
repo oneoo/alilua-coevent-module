@@ -157,8 +157,7 @@ static const char *getposbyip(const char *ip_str, int *len)
         if(stat(monipdata_file, &sb) != -1) {
             if(sb.st_mtime != monipdata_file_mtime) {
                 monipdata_file_mtime = sb.st_mtime;
-                printf("reload\n");
-                monipdata_init("17monipdb.dat");
+                monipdata_init(monipdata_file);
             }
         }
     }
@@ -229,7 +228,7 @@ static const char *getposbyip(const char *ip_str, int *len)
 
         if(memcmp((monipdata + 4) + start, nip, 4) >= 0) {
             memcpy(&index_offset, (monipdata + 4) + start + 4, 3);
-            memcpy(&index_offset + 3, "\x0", 1);
+            //memcpy(&index_offset + 3, "\x0", 1);
 
             if(!machine_little_endian) {
                 index_offset = lb_reverse(index_offset);
