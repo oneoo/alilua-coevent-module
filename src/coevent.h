@@ -115,6 +115,8 @@ int lua_f_hmac_sha1(lua_State *L);
 
 int lua_f_base64_encode(lua_State *L);
 int lua_f_base64_decode(lua_State *L);
+int lua_f_base64_encode_url(lua_State *L);
+int lua_f_base64_decode_url(lua_State *L);
 
 int cosocket_lua_f_escape(lua_State *L);
 int lua_f_escape_uri(lua_State *L);

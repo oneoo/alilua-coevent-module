@@ -1478,6 +1478,8 @@ int luaopen_coevent(lua_State *L)
     lua_register(L, "hmac_sha1", lua_f_hmac_sha1);
     lua_register(L, "base64_encode", lua_f_base64_encode);
     lua_register(L, "base64_decode", lua_f_base64_decode);
+    lua_register(L, "base64_encode_url", lua_f_base64_encode_url);
+    lua_register(L, "base64_decode_url", lua_f_base64_decode_url);
     lua_register(L, "escape", cosocket_lua_f_escape);
     lua_register(L, "escape_uri", lua_f_escape_uri);
     lua_register(L, "unescape_uri", lua_f_unescape_uri);
