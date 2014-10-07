@@ -1,6 +1,6 @@
 local L = require('coevent')
 local httprequest = (require "httpclient").httprequest
-open_log(',1')
+open_log('/dev/null,1')
 L(function()
     while 1 do
         math.randomseed(os.time())

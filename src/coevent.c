@@ -1420,6 +1420,10 @@ static const struct luaL_reg cosocket_methods[] = {
 static void on_exit_handler()
 {
     //some things
+    if(LOGF_T != NULL) {
+        log_destory(LOGF_T);
+        LOGF_T = NULL;
+    }
 }
 
 int lua_f_startloop(lua_State *L)
