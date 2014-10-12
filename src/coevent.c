@@ -399,20 +399,17 @@ int cosocket_be_write(se_ptr_t *ptr)
     cok->in_read_action = 0;
 
     if(!cok->ssl) {
-        while((n = send(cok->fd, cok->send_buf + cok->send_buf_ed,
-                        cok->send_buf_len - cok->send_buf_ed, MSG_DONTWAIT)) > 0) {
+        while((n = send(cok->fd, cok->send_buf + cok->send_buf_ed, cok->send_buf_len - cok->send_buf_ed, MSG_DONTWAIT)) > 0) {
             cok->send_buf_ed += n;
         }
 
     } else {
-        while((n = SSL_write(cok->ssl, cok->send_buf + cok->send_buf_ed,
-                             cok->send_buf_len - cok->send_buf_ed)) > 0) {
+        while((n = SSL_write(cok->ssl, cok->send_buf + cok->send_buf_ed, cok->send_buf_len - cok->send_buf_ed)) > 0) {
             cok->send_buf_ed += n;
         }
     }
 
-    if(cok->send_buf_ed == cok->send_buf_len || (n < 0 && errno != EAGAIN
-            && errno != EWOULDBLOCK)) {
+    if(cok->send_buf_ed == cok->send_buf_len || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
         if(n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
             se_delete(cok->ptr);
             cok->ptr = NULL;
@@ -422,9 +419,11 @@ int cosocket_be_write(se_ptr_t *ptr)
             cok->status = 0;
             cok->send_buf_ed = 0;
 
-        } else {
-            se_be_pri(cok->ptr, NULL);
         }
+
+        /* else {
+            se_be_pri(cok->ptr, NULL);
+        }*/
 
         if(cok->send_buf_need_free) {
             free(cok->send_buf_need_free);
@@ -448,11 +447,18 @@ int cosocket_be_write(se_ptr_t *ptr)
             lua_pushboolean(cok->L, 0);
         }
 
-        cok->inuse = 0;
-        lua_co_resume(cok->L, rc);
+        if(cok->inuse == 1) {
+            se_be_pri(cok->ptr, NULL);
+            cok->inuse = 0;
+            lua_co_resume(cok->L, rc);
+            return 0;
+
+        } else {
+            return 0 - rc;
+        }
     }
 
-    return 0;
+    return cok->send_buf_len - cok->send_buf_ed;
 }
 
 static int lua_co_send(lua_State *L)
@@ -537,12 +543,20 @@ static int lua_co_send(lua_State *L)
             return 2;
         }
 
-        se_be_write(cok->ptr, cosocket_be_write);
+        cok->inuse = 0;
+        int ret = cosocket_be_write(cok->ptr);
 
-        cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);
+        if(ret > 0) {
+            se_be_write(cok->ptr, cosocket_be_write);
+
+            cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);
+            cok->inuse = 1;
+            return lua_yield(L, 0);
+
+        } else {
+            return 0 - ret;
+        }
     }
-    cok->inuse = 1;
-    return lua_yield(L, 0);
 }
 
 int lua_co_read_(cosocket_t *cok)
@@ -1097,11 +1111,11 @@ static int lua_co_tcp(lua_State *L)
                 SSL_CTX_set_default_passwd_cb(cok->ctx, ssl_password_cb);
             }
 
-            int l = snprintf(temp_buf, 4096, "%s:%s:%s", lua_tostring(L, 1), lua_tostring(L, 1), p1);
+            int l = snprintf(temp_buf, 4096, "%s:%s:%s", lua_tostring(L, 1), lua_tostring(L, 2), p1);
             cok->ssl_sign = fnv1a_32(temp_buf, l);
 
         } else {
-            int l = snprintf(temp_buf, 4096, "%s:%s:", lua_tostring(L, 1), lua_tostring(L, 1));
+            int l = snprintf(temp_buf, 4096, "%s:%s:", lua_tostring(L, 1), lua_tostring(L, 2));
             cok->ssl_sign = fnv1a_32(temp_buf, l);
         }
 
@@ -1507,43 +1521,43 @@ coroutine.waits={} \
 coroutine_waits=coroutine.waits \
 coresume_resume_waiting=function(t, ...) \
 if coroutine_status(t) == 'suspended' or not coroutine_waits[t] then return end \
-	coroutine_resume(coroutine_waits[t], ...) \
-	coroutine_waits[t] = nil \
+    coroutine_resume(coroutine_waits[t], ...) \
+    coroutine_waits[t] = nil \
 end \
 coroutine_wait=function(t) \
-	if type(t) ~= 'thread' or coroutine_status(t) ~= 'suspended' then return true end \
-	local t2 = thread_self() \
-	coroutine_waits[t] = t2 \
-	return coroutine_yield() \
+    if type(t) ~= 'thread' or coroutine_status(t) ~= 'suspended' then return true end \
+    local t2 = thread_self() \
+    coroutine_waits[t] = t2 \
+    return coroutine_yield() \
 end \
 coroutine.wait=function(...) \
-	local arg = {...} \
-	local k,v = #arg \
-	if k == 1 then \
-		if type(arg[1]) == 'table' then \
-			local rts = {} \
-			for k,v in ipairs(arg[1]) do \
-			rts[k] = {coroutine_wait(v)} \
-			end \
-			return rts \
-		else \
-			return coroutine_wait(arg[1]) \
-		end \
-	elseif k > 0 then \
-		local rts = {} \
-		for k,v in ipairs(arg) do \
-			rts[k] = {coroutine_wait(v)} \
-		end \
-		return rts \
-	end \
+    local arg = {...} \
+    local k,v = #arg \
+    if k == 1 then \
+        if type(arg[1]) == 'table' then \
+            local rts = {} \
+            for k,v in ipairs(arg[1]) do \
+            rts[k] = {coroutine_wait(v)} \
+            end \
+            return rts \
+        else \
+            return coroutine_wait(arg[1]) \
+        end \
+    elseif k > 0 then \
+        local rts = {} \
+        for k,v in ipairs(arg) do \
+            rts[k] = {coroutine_wait(v)} \
+        end \
+        return rts \
+    end \
 end \
 wait=coroutine.wait \
 coroutine.resume=function(t, ...) \
-	local r={_coroutine_resume(t, ...)} \
-	if coroutine_waits[t] and coroutine_status(t) ~= 'suspended' then \
-		coresume_resume_waiting(t, unpack(r)) \
-	end \
-	return unpack(r) \
+    local r={_coroutine_resume(t, ...)} \
+    if coroutine_waits[t] and coroutine_status(t) ~= 'suspended' then \
+        coresume_resume_waiting(t, unpack(r)) \
+    end \
+    return unpack(r) \
 end \
 coroutine_resume=coroutine.resume");
 
