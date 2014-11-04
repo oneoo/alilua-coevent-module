@@ -188,7 +188,7 @@ void ngx_cpuinfo(void)
 
     ngx_cpuid(1, cpu);
 
-    if(strcmp(vendor, "GenuineIntel") == 0) {
+    if(strcmp((const char*)vendor, "GenuineIntel") == 0) {
 
         switch((cpu[0] & 0xf00) >> 8) {
 
@@ -219,7 +219,7 @@ void ngx_cpuinfo(void)
                 break;
         }
 
-    } else if(strcmp(vendor, "AuthenticAMD") == 0) {
+    } else if(strcmp((const char*)vendor, "AuthenticAMD") == 0) {
         ngx_cacheline_size = 64;
     }
 }
