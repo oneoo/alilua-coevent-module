@@ -80,5 +80,5 @@ install:
 	rm objs/*.so;
 
 clean:
-	rm *.so;
-	rm -r objs;
+	-rm *.so;
+	-rm -r objs;
