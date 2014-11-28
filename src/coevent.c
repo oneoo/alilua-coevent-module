@@ -1445,6 +1445,7 @@ int lua_f_startloop(lua_State *L)
     if(_loop_fd == -1) {
         _loop_fd = se_create(4096);
         attach_on_exit(on_exit_handler);
+        atexit(on_exit_handler);
     }
 
     luaL_argcheck(L, lua_isfunction(L, 1)
