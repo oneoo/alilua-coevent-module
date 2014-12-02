@@ -182,14 +182,14 @@ static const char *getposbyip(const char *ip_str, int *len)
 #ifdef HAVE_INET_PTON
 
     if(ip_str_len == 0 || inet_pton(AF_INET, ip_str, &uip) != 1) {
-        return NULL;
+        return "未知\t未知\t未知\t\t未知";
     }
 
     lgip = ntohl(uip.s_addr);
 #else
 
     if(ip_str_len == 0 || (uip = inet_addr(ip_str)) == INADDR_NONE) {
-        return NULL;
+        return "未知\t未知\t未知\t\t未知";
     }
 
     lgip = ntohl(uip);
@@ -240,7 +240,7 @@ static const char *getposbyip(const char *ip_str, int *len)
     }
 
     if(index_offset < 1 || (monipdata_offset + index_offset - 1024 + pos_len) > monipdata_len) {
-        return NULL;
+        return "未知\t未知\t未知\t\t未知";
     }
 
     *len = pos_len;
