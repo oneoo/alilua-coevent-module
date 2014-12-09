@@ -103,7 +103,10 @@ static int monipdata_init(const char *file)
     machine_little_endian = ((char *)&machine_endian_check)[0];
 
     uint32_t nlen;
-    strcpy(monipdata_file, file);
+
+    if(monipdata_file != file){
+        strcpy(monipdata_file, file);
+    }
     int fd = open(file, O_RDONLY, 0);
 
     if(fd > -1) {
@@ -182,6 +185,7 @@ static const char *getposbyip(const char *ip_str, int *len)
 #ifdef HAVE_INET_PTON
 
     if(ip_str_len == 0 || inet_pton(AF_INET, ip_str, &uip) != 1) {
+        *len = 28;
         return "未知\t未知\t未知\t\t未知";
     }
 
@@ -189,6 +193,7 @@ static const char *getposbyip(const char *ip_str, int *len)
 #else
 
     if(ip_str_len == 0 || (uip = inet_addr(ip_str)) == INADDR_NONE) {
+        *len = 28;
         return "未知\t未知\t未知\t\t未知";
     }
 
@@ -240,6 +245,7 @@ static const char *getposbyip(const char *ip_str, int *len)
     }
 
     if(index_offset < 1 || (monipdata_offset + index_offset - 1024 + pos_len) > monipdata_len) {
+        *len = 28;
         return "未知\t未知\t未知\t\t未知";
     }
 
