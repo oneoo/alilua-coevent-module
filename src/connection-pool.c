@@ -322,7 +322,7 @@ int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size, s
 
                 lua_pushboolean(_cok->L, 1);
 
-                lua_co_resume(_cok->L, 1);
+                lua_f_lua_uthread_resume_in_c(_cok->L, 1);
 
                 return 1;
             }

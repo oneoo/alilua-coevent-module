@@ -3,7 +3,6 @@
 
 static int _loop_fd = 0;
 static lua_State *LM = NULL;
-static int coresume_resume_waiting_handler = 0;
 static unsigned char temp_buf[4096];
 static int _process_count = 1;
 
@@ -69,35 +68,7 @@ static void timeout_handle(void *ptr)
 
     cok->inuse = 0;
 
-    lua_co_resume(cok->L, 2);
-}
-
-int lua_co_resume(lua_State *L , int nargs)
-{
-    int ret = lua_resume(L, nargs);
-
-    if(ret == LUA_ERRRUN && lua_isstring(L, -1)) {
-        LOGF(ERR, "%s", lua_tostring(L, -1));
-
-        //lua_pop(cok->L, -1);
-        if(lua_gettop(L) > 1) {
-            lua_replace(L, 2);
-            lua_pushnil(L);
-            lua_replace(L, 1);
-            lua_settop(L, 2);
-
-        } else {
-            lua_pushnil(L);
-            lua_replace(L, 1);
-        }
-
-    } else {
-        ret = 0;
-    }
-
-    lua_f_coroutine_resume_waiting(L);
-
-    return ret;
+    lua_f_lua_uthread_resume_in_c(cok->L, 2);
 }
 
 int cosocket_be_ssl_connected(se_ptr_t *ptr)
@@ -110,7 +81,7 @@ int cosocket_be_ssl_connected(se_ptr_t *ptr)
         se_be_pri(cok->ptr, NULL);
         lua_pushboolean(cok->L, 1);
         cok->inuse = 0;
-        lua_co_resume(cok->L, 1);
+        lua_f_lua_uthread_resume_in_c(cok->L, 1);
         return 1;
     }
 
@@ -229,7 +200,7 @@ static void be_connect(void *data, int fd)
         cok->status = 0;
         cok->inuse = 0;
 
-        lua_co_resume(cok->L, 2);
+        lua_f_lua_uthread_resume_in_c(cok->L, 2);
         return;
     }
 
@@ -239,7 +210,7 @@ static void be_connect(void *data, int fd)
         return;
     }
 
-    lua_co_resume(cok->L, ret);
+    lua_f_lua_uthread_resume_in_c(cok->L, ret);
 }
 
 static int lua_co_connect(lua_State *L)
@@ -450,7 +421,7 @@ int cosocket_be_write(se_ptr_t *ptr)
         if(cok->inuse == 1) {
             se_be_pri(cok->ptr, NULL);
             cok->inuse = 0;
-            lua_co_resume(cok->L, rc);
+            lua_f_lua_uthread_resume_in_c(cok->L, rc);
             return 0;
 
         } else {
@@ -763,11 +734,11 @@ init_read_buf:
             cok->inuse = 0;
 
             if(rt > 0) {
-                ret = lua_co_resume(cok->L, rt);
+                ret = lua_f_lua_uthread_resume_in_c(cok->L, rt);
 
             } else if(n == 0) {
                 lua_pushnil(cok->L);
-                ret = lua_co_resume(cok->L, 1);
+                ret = lua_f_lua_uthread_resume_in_c(cok->L, 1);
             }
 
             if(ret == LUA_ERRRUN) {
@@ -790,7 +761,7 @@ init_read_buf:
                 cok->timeout_ptr = NULL;
                 cok->inuse = 0;
 
-                ret = lua_co_resume(cok->L, rt);
+                ret = lua_f_lua_uthread_resume_in_c(cok->L, rt);
 
                 if(ret == LUA_ERRRUN) {
                     se_delete(cok->ptr);
@@ -1301,40 +1272,6 @@ static int lua_co_udp(lua_State *L)
 int swop_counter = 0;
 cosocket_swop_t *swop_top = NULL;
 cosocket_swop_t *swop_lat = NULL;
-int lua_f_coroutine_resume_waiting(lua_State *L)
-{
-    if(lua_status(L) == LUA_YIELD) {
-        return 0;
-    }
-
-    int nargs = lua_gettop(L);
-
-    if(coresume_resume_waiting_handler != 0) {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, coresume_resume_waiting_handler);
-
-        if(nargs == 0) {
-            lua_pushthread(L);
-
-        } else {
-            lua_insert(L, 1);
-            lua_pushthread(L);
-            lua_insert(L, 2);
-        }
-
-        if(lua_pcall(L, nargs + 1, 0, 0)) {
-            LOGF(ERR, "%s", lua_tostring(L, -1));
-            exit(1);
-        }
-    }
-
-    return 0;
-}
-
-int lua_f_thread_self(lua_State *L)
-{
-    lua_pushthread(L);
-    return 1;
-}
 
 int lua_f_coroutine_swop(lua_State *L)
 {
@@ -1374,9 +1311,6 @@ void set_loop_fd(int fd, int __process_count)    /// for alilua-serv
     if(__process_count > 1) {
         _process_count = __process_count;
     }
-
-    lua_getglobal(LM, "coresume_resume_waiting");
-    coresume_resume_waiting_handler = luaL_ref(LM, LUA_REGISTRYINDEX);
 }
 
 int coevnet_module_do_other_jobs()
@@ -1403,13 +1337,7 @@ int coevnet_module_do_other_jobs()
 
         if(lua_status(L) == LUA_YIELD) {
             //lua_pushboolean ( L, 1 );
-            int ret = lua_resume(L, 0);
-
-            if(ret == LUA_ERRRUN && lua_isstring(L, -1)) {
-                LOGF(ERR, "%s", lua_tostring(L, -1));
-                lua_pop(L, -1);
-                lua_f_coroutine_resume_waiting(L);
-            }
+            lua_f_lua_uthread_resume_in_c(L, 0);
         }
     }
 }
@@ -1451,17 +1379,24 @@ int lua_f_startloop(lua_State *L)
     luaL_argcheck(L, lua_isfunction(L, 1)
                   && !lua_iscfunction(L, 1), 1, "Lua function expected");
     job_L = lua_newthread(L);
+    /*
+        lua_pushvalue(L, LUA_GLOBALSINDEX);
+        lua_xmove(L, job_L, 1);
+        lua_replace(job_L, LUA_GLOBALSINDEX);
+        lua_xmove(LM, L, 1);*/
+
+    lua_pushvalue(L, 1);    /* copy entry function to top of L*/
+    lua_xmove(L, job_L, 1);    /* move entry function from L to co */
+
     lua_pushvalue(L, 1);    /* move function to top */
     lua_xmove(L, job_L, 1);    /* move function from L to job_L */
 
-    if(lua_resume(job_L, 0) == LUA_ERRRUN && lua_isstring(job_L, -1)) {
-        luaL_error(L, lua_tostring(job_L, -1));
-        lua_pop(job_L, -1);
-    }
+    if(lua_resume(job_L, 0) == LUA_ERRRUN) {
+        if(lua_isstring(job_L, -1)) {
+            luaL_error(L, lua_tostring(job_L, -1));
+        }
 
-    if(coresume_resume_waiting_handler == 0) {
-        lua_getglobal(job_L, "coresume_resume_waiting");
-        coresume_resume_waiting_handler = luaL_ref(job_L, LUA_REGISTRYINDEX);
+        lua_pop(job_L, 1);
     }
 
     LM = job_L;
@@ -1473,6 +1408,8 @@ int lua_f_startloop(lua_State *L)
 
 int luaopen_coevent(lua_State *L)
 {
+    luaopen_uthread(L);
+
     LM = L;
     _loop_fd = -1;
 
@@ -1489,7 +1426,6 @@ int luaopen_coevent(lua_State *L)
     lua_setglobal(L, "null");
 
     lua_register(L, "startloop", lua_f_startloop);
-    lua_register(L, "thread_self", lua_f_thread_self);
     lua_register(L, "swop", lua_f_coroutine_swop);
     lua_register(L, "sleep", lua_f_sleep);
     lua_register(L, "md5", lua_f_md5);
@@ -1510,57 +1446,12 @@ int luaopen_coevent(lua_State *L)
 
     luaL_loadstring(L, " \
 DEBUG,INFO,NOTICE,WARN,ALERT,ERR = 1,2,3,4,5,6 \
-table_remove=table.remove \
-coroutine._resume=coroutine.resume \
-_coroutine_resume=coroutine.resume \
+coroutine_resume=coroutine.resume \
 coroutine_create=coroutine.create \
-newthread=function(f, ...) local t = coroutine_create(f) local r,e = _coroutine_resume(t, ...) if not r then return nil,e end return t end \
-newco = newthread \
-coroutine_status=coroutine.status \
-coroutine_yield=coroutine.yield \
-coroutine.waits={} \
-coroutine_waits=coroutine.waits \
-coresume_resume_waiting=function(t, ...) \
-if coroutine_status(t) == 'suspended' or not coroutine_waits[t] then return end \
-    coroutine_resume(coroutine_waits[t], ...) \
-    coroutine_waits[t] = nil \
-end \
-coroutine_wait=function(t) \
-    if type(t) ~= 'thread' or coroutine_status(t) ~= 'suspended' then return true end \
-    local t2 = thread_self() \
-    coroutine_waits[t] = t2 \
-    return coroutine_yield() \
-end \
-coroutine.wait=function(...) \
-    local arg = {...} \
-    local k,v = #arg \
-    if k == 1 then \
-        if type(arg[1]) == 'table' then \
-            local rts = {} \
-            for k,v in ipairs(arg[1]) do \
-            rts[k] = {coroutine_wait(v)} \
-            end \
-            return rts \
-        else \
-            return coroutine_wait(arg[1]) \
-        end \
-    elseif k > 0 then \
-        local rts = {} \
-        for k,v in ipairs(arg) do \
-            rts[k] = {coroutine_wait(v)} \
-        end \
-        return rts \
-    end \
-end \
+coroutine_wait=coroutine.wait \
 wait=coroutine.wait \
-coroutine.resume=function(t, ...) \
-    local r={_coroutine_resume(t, ...)} \
-    if coroutine_waits[t] and coroutine_status(t) ~= 'suspended' then \
-        coresume_resume_waiting(t, unpack(r)) \
-    end \
-    return unpack(r) \
-end \
-coroutine_resume=coroutine.resume");
+newthread=coroutine.spawn \
+newco = newthread ");
 
     lua_pcall(L, 0, 0, 0);
 

@@ -27,6 +27,8 @@
 //#define free(p) do { if (p) { free(p); p = NULL; } } while (0)
 //#define close(fd) do { if (fd >= 0) { close(fd); fd = -1; } } while (0)
 
+#include "lua-uthread.h"
+
 #ifndef _COEVENT_H
 #define _COEVENT_H
 
@@ -88,9 +90,7 @@ typedef struct {
     u_char _send_buf[_SENDBUF_SIZE];// with size align / 60
 } cosocket_t;
 
-int lua_co_resume(lua_State *L , int nargs);
 int cosocket_be_ssl_connected(se_ptr_t *ptr);
-int lua_f_coroutine_resume_waiting(lua_State *L);
 
 int cosocket_be_write(se_ptr_t *ptr);
 int cosocket_be_read(se_ptr_t *ptr);

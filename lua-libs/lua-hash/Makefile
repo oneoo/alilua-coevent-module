@@ -1,4 +1,4 @@
-MODNAME= monip
+MODNAME= hash
 CC = gcc
 OPTIMIZATION = -O3
 CFLAGS = -lm -lpthread

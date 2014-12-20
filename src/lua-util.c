@@ -67,7 +67,7 @@ int check_lua_sleep_timeouts()
                 }
 
                 if(L) {
-                    lua_co_resume(L, 0);
+                    lua_f_lua_uthread_resume_in_c(L, 0);
                     l_now = longtime() / 10;
                 }
 
