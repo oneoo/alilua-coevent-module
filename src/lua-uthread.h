@@ -19,6 +19,7 @@
 #include <lua.h>
 #include <lauxlib.h>
 
+#include "../merry/merry.h"
 #include "../merry/common/rbtree.h"
 
 #define VERSION "0.1"
