@@ -5,6 +5,10 @@
 # Include path where lua.h, luaconf.h and lauxlib.h reside:
 INCLUDES= -I/usr/local/include -I/usr/local/include/luajit-2.0 -I/usr/local/include/luajit-2.1
 
+ifneq ($(LIBLUA),)
+INCLUDES=""
+endif
+
 DEFINES=
 # Use this for the old ARM ABI with swapped FPA doubles.
 # Do NOT use this for modern ARM EABI with VFP or soft-float!

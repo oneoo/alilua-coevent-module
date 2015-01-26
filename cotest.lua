@@ -206,17 +206,17 @@ local af = function()
 	coroutine_wait(newthread(test_memcached))
 	coroutine_wait(newthread(test_redis))
 	
-	--coroutine_wait(newthread(test_http_client, 0, 'wiki.upyun.com', '/index.php?title=%E9%A6%96%E9%A1%B5'))
+	--coroutine_wait(newthread(test_http_client, 0, 'docs.upyun.com', '/'))
 	local t = longtime()
 	--test_http_client(1, 'www.163.com') test_http_client(2, 'www.163.com') test_http_client(3, 'www.163.com')
 	
 	--t1 = newthread(test_http_client, 1, 'www.163.com')
 	--t2 = newthread(test_http_client, 2, 'weibo.com')
 	--t3 = newthread(test_http_client, 3, 'www.163.com')
-	--coroutine_wait(newthread(test_http_client, 1, 'wiki.upyun.com', '/index.php?title=%E9%A6%96%E9%A1%B5'))
+	--coroutine_wait(newthread(test_http_client, 1, 'docs.upyun.com', '/'))
 	local ts = {}
 	for i=1,10 do swop()
-		table.insert(ts, newthread(test_http_client, i+100, 'wiki.upyun.com', '/index.php?title=%E9%A6%96%E9%A1%B5'))
+		table.insert(ts, newthread(test_http_client, i+100, 'docs.upyun.com', '/'))
 		--table.insert(ts, newthread(test_http_client, i+200, 'www.qq.com', '/'))
 		--table.insert(ts, newthread(test_http_client, i+300, 'news.qq.com', '/'))
 	end
@@ -226,20 +226,15 @@ local af = function()
 	coroutine_wait(t3)
 	
 	rts,e = wait(ts)
-
-	for i=1,1000 do
-		if not rts[i] then break end
-		print(i+100, rts[i])
-	end
 	
-	print('times:', (longtime()-t)/1000)
+	print('times:', rts, e, (longtime()-t)/1000)
 
 	
 	
 	local t = longtime()
 	local ts = {}
 	for i=1,1 do --swop()
-		print(i, coroutine_wait(newthread(test_http_client, i+100, 'wiki.upyun.com', '/index.php?title=%E9%A6%96%E9%A1%B5')))
+		print(i, coroutine_wait(newthread(test_http_client, i+100, 'docs.upyun.com', '/')))
 	end
 	print('times:', (longtime()-t)/1000)
 	

@@ -13,13 +13,17 @@ LUABIN= $(LUA)/bin
 
 ZLIB=./
 
-CC = gcc
+CC = gcc $(LIBLUA) 
 
 # no need to change anything below here
 CFLAGS= $(INCS) $(DEFS) $(WARN) -O3 -fPIC
 WARN= -pedantic #-ansi
 INCS= -I$(LUAINC) -I/usr/local/include -I/usr/local/include/luajit-2.0 -I/usr/local/include/luajit-2.1 -I$(ZLIB) $(LIBLUA)
 LIBS= -L$(ZLIB) -lz $(LIBLUA) -llua
+
+ifneq ($(LIBLUA),)
+INCS =
+endif
 
 ifneq (,$(findstring luajit,$(LIBLUA)))
 LIBS= -L$(ZLIB) -lz $(LIBLUA)
