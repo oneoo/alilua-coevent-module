@@ -127,4 +127,7 @@ int lua_f_open_log(lua_State *L);
 
 LUALIB_API int luaopen_eio(lua_State *L);
 
+int lua_co_build_dns_query_packet(lua_State *L);
+int lua_co_parse_dns_result(lua_State *L);
+
 #endif

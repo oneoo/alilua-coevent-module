@@ -1440,6 +1440,8 @@ int luaopen_coevent(lua_State *L)
     lua_register(L, "unescape_uri", lua_f_unescape_uri);
     lua_register(L, "time", lua_f_time);
     lua_register(L, "longtime", lua_f_longtime);
+    lua_register(L, "build_dns_query_packet", lua_co_build_dns_query_packet);
+    lua_register(L, "parse_dns_result", lua_co_parse_dns_result);
     lua_register(L, "LOG", lua_f_log);
     lua_register(L, "open_log", lua_f_open_log);
     luaopen_eio(L);
