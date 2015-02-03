@@ -6,7 +6,7 @@
 INCLUDES= -I/usr/local/include -I/usr/local/include/luajit-2.0 -I/usr/local/include/luajit-2.1
 
 ifneq ($(LIBLUA),)
-INCLUDES=""
+INCLUDES=
 endif
 
 DEFINES=

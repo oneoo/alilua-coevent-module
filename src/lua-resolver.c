@@ -1,7 +1,7 @@
 #include "coevent.h"
 
 static unsigned char temp_buf[4096] = {0};
-static uint16_t dns_tid = 0;
+static uint16_t dns_tid = 118202;
 
 int lua_co_build_dns_query_packet(lua_State *L)
 {
@@ -10,10 +10,10 @@ int lua_co_build_dns_query_packet(lua_State *L)
     dns_query_header_t *header = NULL;
     char *name = NULL, *s = NULL, *p = NULL, *client_ip = NULL;
 
-    name = lua_tolstring(L, 1, &nlen);
+    name = (char *)lua_tolstring(L, 1, &nlen);
 
     if(lua_gettop(L) > 1) {
-        client_ip = lua_tostring(L, 2);
+        client_ip = (char *)lua_tostring(L, 2);
     }
 
     header           = (dns_query_header_t *) temp_buf;
@@ -112,7 +112,7 @@ int lua_co_build_dns_query_packet(lua_State *L)
 int lua_co_parse_dns_result(lua_State *L)
 {
     size_t len = 0;
-    char *data = lua_tolstring(L, 1, &len);
+    char *data = (char *)lua_tolstring(L, 1, &len);
     lua_settop(L, 0);
 
     const unsigned char *p = NULL, *e = NULL;
