@@ -117,6 +117,7 @@ static int monipdata_init(const char *file)
             lseek(fd, 0, SEEK_SET);
 
             if(read(fd, _p, len) != len) {
+                free(_p);
                 close(fd);
                 return 0;
 
