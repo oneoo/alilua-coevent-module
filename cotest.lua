@@ -3,6 +3,7 @@ local mysql = require "mysql"
 local cjson = require "cjson"
 local httprequest = (require "httpclient").httprequest
 local cmsgpack = require('cmsgpack')
+local ok, cmsgpack_safe = pcall(require, 'cmsgpack.safe')
 
 print('start')
 local db = mysql:new()
