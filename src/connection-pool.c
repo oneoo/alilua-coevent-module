@@ -3,7 +3,7 @@
 
 void *cosocket_connection_pool_counters[64] = {0};
 void *connect_pool_p[2][64] = {{0}, {0}};
-int connect_pool_ttl = 30; /// cache times
+int connect_pool_ttl = 60; /// cache times
 
 static int cosocket_be_close(se_ptr_t *ptr)
 {
@@ -132,22 +132,56 @@ void delete_in_waiting_get_connection(void *_n)
     cosocket_waiting_get_connection_t *n = _n;
     int k = n->k;
 
+    if(waiting_get_connections[k] == n) {
+        waiting_get_connections[k] = n->next;
+    }
+
+    if(waiting_get_connections_end[k] == n) {
+        waiting_get_connections_end[k] = n->uper;
+    }
+
     if(n->uper) {
         ((cosocket_waiting_get_connection_t *) n->uper)->next = n->next;
+    }
 
-        if(n->next) {
-            ((cosocket_waiting_get_connection_t *) n->next)->uper = n->uper;
-        }
-
-    } else {
-        waiting_get_connections[k] = n->next;
-
-        if(n->next) {
-            ((cosocket_waiting_get_connection_t *) n->next)->uper = NULL;
-        }
+    if(n->next) {
+        ((cosocket_waiting_get_connection_t *) n->next)->uper = n->uper;
     }
 
     free(n);
+}
+
+void resume_in_waiting_get_connection(int loop_fd)
+{
+    int k = 0;
+
+    for(k = 0; k < 64; k++) {
+        if(waiting_get_connections[k]) {
+            cosocket_t *cok = ((cosocket_waiting_get_connection_t *)waiting_get_connections[k])->cok;
+
+            cok->ptr = get_connection_in_pool(loop_fd, cok->pool_key, cok);
+
+            if(cok->ptr) {
+                cok->pool_wait = NULL;
+                delete_in_waiting_get_connection(waiting_get_connections[k]);
+                ((se_ptr_t *) cok->ptr)->data = cok;
+                cok->status = 2;
+                cok->reusedtimes = 1;
+                cok->in_read_action = 0;
+                cok->fd = ((se_ptr_t *) cok->ptr)->fd;
+                //printf("reuse %d\n", cok->fd);
+                delete_timeout(cok->timeout_ptr);
+                cok->timeout_ptr = NULL;
+                se_be_pri(cok->ptr, NULL);
+                lua_pushboolean(cok->L, 1);
+
+                lua_f_lua_uthread_resume_in_c(cok->L, 1);
+
+                return;
+            }
+
+        }
+    }
 }
 
 se_ptr_t *get_connection_in_pool(int loop_fd, unsigned long pool_key, cosocket_t *cok)
@@ -172,7 +206,7 @@ se_ptr_t *get_connection_in_pool(int loop_fd, unsigned long pool_key, cosocket_t
 
             ptr = m->ptr;
 
-            if(m->z == 0) {    /// recached
+            if(m->z == 0) {
                 m->z = 1;
                 nn = connect_pool_p[p][m->pool_key % 64];
 
@@ -202,6 +236,7 @@ se_ptr_t *get_connection_in_pool(int loop_fd, unsigned long pool_key, cosocket_t
 
     /// end
     if(pool_key == 0) {
+        resume_in_waiting_get_connection(loop_fd);
         return NULL; /// only do clear job
     }
 
@@ -273,62 +308,6 @@ int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size, s
     }
 
     int k = pool_key % 64;
-    /// check waiting list
-    {
-        cosocket_waiting_get_connection_t *n = waiting_get_connections[k];
-
-        if(n != NULL) {
-            while(n && ((cosocket_t *) n->cok)->pool_key != pool_key) {
-                n = n->next;
-            }
-
-            if(n) {
-                if(n->uper) {
-                    ((cosocket_waiting_get_connection_t *) n->uper)->next = n->next;
-
-                    if(n->next) {
-                        ((cosocket_waiting_get_connection_t *) n->next)->uper = n->uper;
-                    }
-
-                } else {
-                    waiting_get_connections[k] = n->next;
-
-                    if(n->next) {
-                        ((cosocket_waiting_get_connection_t *) n->next)->uper = NULL;
-                    }
-                }
-
-                cosocket_t *_cok = n->cok;
-
-                if(n == waiting_get_connections_end[k]) {
-                    waiting_get_connections_end[k] = n->uper;
-                }
-
-                free(n);
-
-                _cok->ctx = ctx;
-                _cok->ssl = ssl;
-                _cok->ssl_pw = ssl_pw;
-                _cok->ptr = ptr;
-                ptr->data = _cok;
-                _cok->fd = ptr->fd;
-                _cok->status = 2;
-                _cok->reusedtimes = 1;
-                _cok->inuse = 0;
-                _cok->pool_wait = NULL;
-                delete_timeout(_cok->timeout_ptr);
-                _cok->timeout_ptr = NULL;
-                se_be_pri(ptr, NULL);
-
-                lua_pushboolean(_cok->L, 1);
-
-                lua_f_lua_uthread_resume_in_c(_cok->L, 1);
-
-                return 1;
-            }
-        }
-    }
-    /// end
 
     int p = (now / connect_pool_ttl) % 2;
 
