@@ -1392,6 +1392,8 @@ int lua_f_startloop(lua_State *L)
     lua_xmove(L, job_L, 1);    /* move function from L to job_L */
 
     if(lua_resume(job_L, 0) == LUA_ERRRUN) {
+        lua_gc(job_L, LUA_GCCOLLECT, 0);
+
         if(lua_isstring(job_L, -1)) {
             luaL_error(L, lua_tostring(job_L, -1));
         }

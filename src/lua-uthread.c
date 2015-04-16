@@ -155,6 +155,7 @@ int lua_f_lua_uthread_resume_in_c(lua_State *L, int nargs)
 
     if(status == LUA_YIELD) {
     } else if(status) {
+        lua_gc(L, LUA_GCCOLLECT, 0);
         LOGF(ERR, "Lua:error %s", lua_tostring(L, lua_gettop(L)));
 
         nargs = lua_gettop(L) - 2;
@@ -281,6 +282,7 @@ int lua_f_lua_uthread_resume(lua_State *L)
         lua_xmove(co, L, lua_gettop(co));
 
     } else if(status) {
+        lua_gc(L, LUA_GCCOLLECT, 0);
         const char *err = lua_tostring(co, lua_gettop(co));
 
         LOGF(ERR, "Lua:error %s", lua_tostring(co, lua_gettop(co)));
