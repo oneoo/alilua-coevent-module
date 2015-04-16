@@ -166,6 +166,7 @@ void resume_in_waiting_get_connection(int loop_fd)
                 delete_in_waiting_get_connection(waiting_get_connections[k]);
                 ((se_ptr_t *) cok->ptr)->data = cok;
                 cok->status = 2;
+                cok->inuse = 0;
                 cok->reusedtimes = 1;
                 cok->in_read_action = 0;
                 cok->fd = ((se_ptr_t *) cok->ptr)->fd;
