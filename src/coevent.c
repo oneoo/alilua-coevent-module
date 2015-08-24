@@ -85,6 +85,7 @@ static void timeout_handle(void *ptr)
         cok->send_buf_need_free = NULL;
     }
 
+
     cok->inuse = 0;
 
     lua_f_lua_uthread_resume_in_c(cok->L, 2);
@@ -408,25 +409,6 @@ int cosocket_be_write(se_ptr_t *ptr)
             cok->fd = -1;
             cok->status = 0;
             cok->send_buf_ed = 0;
-
-            if(cok->read_buf) {
-                cosocket_link_buf_t *fr = cok->read_buf;
-                cosocket_link_buf_t *nb = NULL;
-
-                while(fr) {
-                    nb = fr->next;
-                    free(fr->buf);
-                    free(fr);
-                    fr = nb;
-                }
-
-                cok->read_buf = NULL;
-            }
-
-            if(cok->send_buf_need_free) {
-                free(cok->send_buf_need_free);
-                cok->send_buf_need_free = NULL;
-            }
 
         }
 
@@ -764,25 +746,6 @@ init_read_buf:
             close(cok->fd);
             cok->fd = -1;
             cok->status = 0;
-
-            if(cok->read_buf) {
-                cosocket_link_buf_t *fr = cok->read_buf;
-                cosocket_link_buf_t *nb = NULL;
-
-                while(fr) {
-                    nb = fr->next;
-                    free(fr->buf);
-                    free(fr);
-                    fr = nb;
-                }
-
-                cok->read_buf = NULL;
-            }
-
-            if(cok->send_buf_need_free) {
-                free(cok->send_buf_need_free);
-                cok->send_buf_need_free = NULL;
-            }
         }
 
         if(cok->in_read_action == 1) {
@@ -805,25 +768,6 @@ init_read_buf:
                 close(cok->fd);
                 cok->fd = -1;
                 cok->status = 0;
-
-                if(cok->read_buf) {
-                    cosocket_link_buf_t *fr = cok->read_buf;
-                    cosocket_link_buf_t *nb = NULL;
-
-                    while(fr) {
-                        nb = fr->next;
-                        free(fr->buf);
-                        free(fr);
-                        fr = nb;
-                    }
-
-                    cok->read_buf = NULL;
-                }
-
-                if(cok->send_buf_need_free) {
-                    free(cok->send_buf_need_free);
-                    cok->send_buf_need_free = NULL;
-                }
             }
         }
 
@@ -846,25 +790,6 @@ init_read_buf:
                     close(cok->fd);
                     cok->fd = -1;
                     cok->status = 0;
-
-                    if(cok->read_buf) {
-                        cosocket_link_buf_t *fr = cok->read_buf;
-                        cosocket_link_buf_t *nb = NULL;
-
-                        while(fr) {
-                            nb = fr->next;
-                            free(fr->buf);
-                            free(fr);
-                            fr = nb;
-                        }
-
-                        cok->read_buf = NULL;
-                    }
-
-                    if(cok->send_buf_need_free) {
-                        free(cok->send_buf_need_free);
-                        cok->send_buf_need_free = NULL;
-                    }
                 }
             }
         }
