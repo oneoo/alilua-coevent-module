@@ -177,16 +177,35 @@ static int _be_connect(cosocket_t *cok, int fd, int yielded)
         }
 
         SSL_set_fd(cok->ssl, cok->fd);
-        se_be_read(cok->ptr, cosocket_be_ssl_connected);
 
-        if(SSL_connect(cok->ssl) == 1) {
-            se_be_pri(cok->ptr, NULL);
-            lua_pushboolean(cok->L, 1);
-            cok->inuse = 0;
-            return 1;
+        if(se_be_read(cok->ptr, cosocket_be_ssl_connected) == -1) {
+            se_delete(cok->ptr);
+            close(cok->fd);
+            cok->ptr = NULL;
+            cok->fd = -1;
+            cok->status = 0;
+
+            SSL_shutdown(cok->ssl);
+            SSL_free(cok->ssl);
+            cok->ssl = NULL;
+            SSL_CTX_free(cok->ctx);
+            cok->ctx = NULL;
+
+            lua_pushnil(cok->L);
+            lua_pushstring(cok->L, "Network Error");
+            return 2;
+
+        } else {
+
+            if(SSL_connect(cok->ssl) == 1) {
+                se_be_pri(cok->ptr, NULL);
+                lua_pushboolean(cok->L, 1);
+                cok->inuse = 0;
+                return 1;
+            }
+
+            cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);
         }
-
-        cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);
 
         return -2;
     }
@@ -538,11 +557,24 @@ static int lua_co_send(lua_State *L)
         int ret = cosocket_be_write(cok->ptr);
 
         if(ret > 0) {
-            se_be_write(cok->ptr, cosocket_be_write);
+            if(
+                se_be_write(cok->ptr, cosocket_be_write) == -1) {
+                se_delete(cok->ptr);
+                close(cok->fd);
+                cok->ptr = NULL;
+                cok->fd = -1;
+                cok->status = 0;
 
-            cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);
-            cok->inuse = 1;
-            return lua_yield(L, 0);
+                lua_pushnil(cok->L);
+                lua_pushstring(cok->L, "Network Error");
+                return 2;
+
+            } else {
+
+                cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);
+                cok->inuse = 1;
+                return lua_yield(L, 0);
+            }
 
         } else {
             return 0 - ret;
@@ -857,7 +889,15 @@ static int lua_co_read(lua_State *L)
 
         if(cok->in_read_action != 1) {
             cok->in_read_action = 1;
-            se_be_read(cok->ptr, cosocket_be_read);
+
+            if(se_be_read(cok->ptr, cosocket_be_read) == -1) {
+                close(cok->fd);
+                cok->fd = -1;
+
+                lua_pushnil(L);
+                lua_pushstring(L, "Network Error!");
+                return 2;
+            }
         }
 
         cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);

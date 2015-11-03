@@ -348,7 +348,9 @@ int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size, s
         ptr->data = m;
         n = connect_pool_p[p][k];
 
-        se_be_read(ptr, cosocket_be_close);
+        if(se_be_read(ptr, cosocket_be_close) == -1) {
+            cosocket_be_close(ptr);
+        }
 
         return 1;
 
@@ -380,7 +382,11 @@ int add_connection_to_pool(int loop_fd, unsigned long pool_key, int pool_size, s
                 n->next = m;
 
                 ptr->data = m;
-                se_be_read(ptr, cosocket_be_close);
+
+                if(se_be_read(ptr, cosocket_be_close) == -1) {
+                    cosocket_be_close(ptr);
+                }
+
                 return 1;
             }
 
