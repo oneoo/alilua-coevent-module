@@ -756,7 +756,7 @@ static int lua_f_eio_open(lua_State *L)
     }
 
     eio_open(lua_tostring(L, 1), (om == 1 ? O_RDONLY :
-                                  (om == 2 ? (O_APPEND | O_CREAT) : (O_RDWR | O_CREAT)))
+                                  (om == 2 ? (O_APPEND | O_RDWR | O_CREAT) : (O_RDWR | O_CREAT)))
              , mode, 0, eio_open_cb, L);
 
     return lua_yield(L, 0);
