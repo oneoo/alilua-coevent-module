@@ -10,10 +10,11 @@ L(function()
         print('start', n)
         for i=1,n do
             ts[i] = newthread(function()
-                    local res,e = httprequest('http://localhost:19827/', {timeout=2000})
+                    local res,e = httprequest('https://www.upyun.com/', {timeout=2000})
                     if e then print(res and res.status or e) end
                 end)
         end
         wait(ts)
+        print('done', n)
     end
 end)

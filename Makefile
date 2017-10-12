@@ -1,6 +1,5 @@
 MODNAME= coevent
-CC = gcc
-OPTIMIZATION = -O3
+CC = gcc -g -ggdb
 CFLAGS = -lssl -lcrypto -lm -lpthread -lz
 
 INCLUDES=-I/usr/local/include -I/usr/local/include/luajit-2.0 -I/usr/local/include/luajit-2.1
@@ -54,11 +53,11 @@ all:$(MODNAME).o
 $(MODNAME).o:
 	[ -f merry/merry.h ] || (git submodule init && git submodule update)
 	[ -d objs ] || mkdir objs;
-	cd objs && $(CC) -g -fPIC -c ../merry/common/*.c;
-	cd objs && $(CC) -g -fPIC -c ../merry/se/*.c;
-	cd objs && $(CC) -g -fPIC -c ../merry/se/libeio/*.c;
-	cd objs && $(CC) -g -fPIC -c ../merry/*.c;
-	cd objs && $(CC) -g -fPIC -c ../src/*.c $(INCLUDES);
+	cd objs && $(CC) -fPIC -c ../merry/common/*.c;
+	cd objs && $(CC) -fPIC -c ../merry/se/*.c;
+	cd objs && $(CC) -fPIC -c ../merry/se/libeio/*.c;
+	cd objs && $(CC) -fPIC -c ../merry/*.c;
+	cd objs && $(CC) -fPIC -c ../src/*.c $(INCLUDES);
 
 	[ -f bit.so ] || (cd lua-libs/LuaBitOp-1.0.2 && make LIBLUA="$(LIBLUA)" && cp bit.so ../../ && make clean);
 	[ -f cjson.so ] || (cd lua-libs/lua-cjson-2.1.0 && make LIBLUA="$(LIBLUA)" && cp cjson.so ../../ && make clean);
@@ -69,7 +68,6 @@ $(MODNAME).o:
 	[ -f crc32.so ] || (cd lua-libs/lua-crc32 && make LIBLUA="$(LIBLUA)" && cp crc32.so ../../ && make clean && rm -rf *.o);
 
 install:
-	`cd objs` && $(CC) -O3 objs/*.o -o objs/$(MODNAME).so -shared $(CFLAGS) $(LIBLUA);
 	cp objs/*.so `$(LUABIN) installpath.lua .so`;
 	cp *.so `$(LUABIN) installpath.lua .so`;
 	cp mysql.lua `$(LUABIN) installpath.lua .lua`;
