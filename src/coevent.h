@@ -58,6 +58,8 @@ typedef struct {
     uint8_t use_ssl;
     uint8_t in_read_action;
 
+    FILE *fp;
+
     void *pool_wait;
 
     SSL_CTX *ctx;

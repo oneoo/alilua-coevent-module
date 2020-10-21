@@ -1,7 +1,7 @@
 #include "coevent.h"
 
 static unsigned char temp_buf[4096] = {0};
-static uint16_t dns_tid = 118202;
+static uint16_t dns_tid = 18202;
 
 int lua_co_build_dns_query_packet(lua_State *L)
 {

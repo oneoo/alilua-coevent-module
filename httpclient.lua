@@ -66,6 +66,8 @@ function httprequest(url, params)
 	end
 	if params.timeout then
 		sock:settimeout(params.timeout)
+	else
+		sock:settimeout(30000)
 	end
 	
 	local host = url:match('^([^/]+)')

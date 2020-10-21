@@ -652,11 +652,9 @@ int lua_co_read_(cosocket_t *cok)
         size_t copy_ed = 0;
         int this_copy_len = 0;
         cosocket_link_buf_t *bf = NULL;
-
         while(cok->read_buf) {
             this_copy_len = (cok->read_buf->buf_len + copy_ed > copy_len ? copy_len - copy_ed :
                              cok->read_buf->buf_len);
-
             if(this_copy_len > 0) {
                 memcpy(buf2lua + copy_ed, cok->read_buf->buf, this_copy_len);
                 copy_ed += this_copy_len;
@@ -695,7 +693,6 @@ int lua_co_read_(cosocket_t *cok)
                 free(bf);
             }
         }
-
         free(buf2lua);
     }
 
@@ -741,8 +738,7 @@ init_read_buf:
     }
 
     if(!cok->ssl) {
-        while((n = recv(cok->fd, cok->last_buf->buf + cok->last_buf->buf_len,
-                        cok->last_buf->buf_size - cok->last_buf->buf_len, 0)) > 0) {
+        while((n = recv(cok->fd, cok->last_buf->buf + cok->last_buf->buf_len, cok->last_buf->buf_size - cok->last_buf->buf_len, 0)) > 0) {
             cok->last_buf->buf_len += n;
             cok->total_buf_len += n;
 
@@ -763,7 +759,6 @@ init_read_buf:
         }
 
     }
-
     if(n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
         int rfd = cok->fd;
         /// socket closed
@@ -874,19 +869,15 @@ static int lua_co_read(lua_State *L)
                 }
             }
         }
-
         int rt = lua_co_read_(cok);
-
         if(rt > 0) {
             return rt; // has buf
         }
-
         if(cok->fd == -1) {
             lua_pushnil(L);
             lua_pushstring(L, "Not connected!");
             return 2;
         }
-
         if(cok->in_read_action != 1) {
             cok->in_read_action = 1;
 
@@ -898,6 +889,7 @@ static int lua_co_read(lua_State *L)
                 lua_pushstring(L, "Network Error!");
                 return 2;
             }
+
         }
 
         cok->timeout_ptr = add_timeout(cok, cok->timeout, timeout_handle);
@@ -1329,6 +1321,503 @@ static int lua_co_udp(lua_State *L)
     return 1;
 }
 
+
+static void popen_timeout_handle(void *ptr)
+{
+    cosocket_t *cok = ptr;
+    delete_timeout(cok->timeout_ptr);
+    cok->timeout_ptr = NULL;
+
+    if(cok->pool_wait) {
+        delete_in_waiting_get_connection(cok->pool_wait);
+        cok->pool_wait = NULL;
+    }
+
+    lua_pushnil(cok->L);
+
+    if(cok->ptr) {
+        if(cok->status == 3) {
+            lua_pushstring(cok->L, "Connect error!(wait pool timeout)");
+
+        } else if(((se_ptr_t *) cok->ptr)->wfunc == cosocket_be_ssl_connected) {
+            lua_pushstring(cok->L, "SSL Connect timeout!");
+
+        } else if(((se_ptr_t *) cok->ptr)->wfunc == cosocket_be_write) {
+            lua_pushstring(cok->L, "Send timeout!");
+
+        } else if(((se_ptr_t *) cok->ptr)->rfunc == cosocket_be_read) {
+            lua_pushstring(cok->L, "Read timeout!");
+
+        } else {
+            lua_pushstring(cok->L, "Timeout!");
+        }
+
+    } else {
+        if(cok->status == 3) {
+            lua_pushstring(cok->L, "Connect error!(wait pool timeout)");
+
+        } else {
+            lua_pushstring(cok->L, "Timeout!");
+        }
+    }
+
+    {
+        se_delete(cok->ptr);
+        cok->ptr = NULL;
+
+        if(cok->fd > -1) {
+            pclose(cok->fp);
+            cok->fd = -1;
+        }
+
+        cok->status = 0;
+    }
+
+    if(cok->read_buf) {
+        cosocket_link_buf_t *fr = cok->read_buf;
+        cosocket_link_buf_t *nb = NULL;
+
+        while(fr) {
+            nb = fr->next;
+            free(fr->buf);
+            free(fr);
+            fr = nb;
+        }
+
+        cok->read_buf = NULL;
+    }
+
+    if(cok->send_buf_need_free) {
+        free(cok->send_buf_need_free);
+        cok->send_buf_need_free = NULL;
+    }
+
+
+    cok->inuse = 0;
+
+    lua_f_lua_uthread_resume_in_c(cok->L, 2);
+}
+int lua_co_popen_read_(cosocket_t *cok)
+{
+    if(cok->total_buf_len < 1) {
+        if(cok->status == 0) {
+            lua_pushnil(cok->L);
+            lua_pushstring(cok->L, "Not connected!");
+            return 2;
+        }
+
+        return 0;
+    }
+
+    size_t be_copy = cok->buf_read_len;
+
+    if(cok->buf_read_len == -1) { // read line
+        int i = 0;
+        int oi = 0;
+        int has = 0;
+        cosocket_link_buf_t *nbuf = cok->read_buf;
+
+        while(nbuf) {
+            for(i = 0; i < nbuf->buf_len; i++) {
+                if(nbuf->buf[i] == '\n') {
+                    has = 1;
+                    break;
+                }
+            }
+
+            if(has == 1) {
+                break;
+            }
+
+            oi += i;
+            nbuf = nbuf->next;
+        }
+
+        i += oi;
+
+        if(has == 1) {
+            i += 1;
+            be_copy = i;
+
+        } else {
+            return 0;
+        }
+
+    } else if(cok->buf_read_len == -2) {
+        be_copy = cok->total_buf_len;
+    }
+
+    if(cok->status == 0) {
+        if(be_copy > cok->total_buf_len) {
+            be_copy = cok->total_buf_len;
+        }
+    }
+
+    int kk = 0;
+
+    if(be_copy > 0 && cok->total_buf_len >= be_copy) {
+        char *buf2lua = large_malloc(be_copy);
+
+        if(!buf2lua) {
+            LOGF(ERR, "malloc error @%s:%d\n", __FILE__, __LINE__);
+            exit(1);
+        }
+
+        size_t copy_len = be_copy;
+        size_t copy_ed = 0;
+        int this_copy_len = 0;
+        cosocket_link_buf_t *bf = NULL;
+        while(cok->read_buf) {
+            this_copy_len = (cok->read_buf->buf_len + copy_ed > copy_len ? copy_len - copy_ed :
+                             cok->read_buf->buf_len);
+            if(this_copy_len > 0) {
+                memcpy(buf2lua + copy_ed, cok->read_buf->buf, this_copy_len);
+                copy_ed += this_copy_len;
+                memmove(cok->read_buf->buf, cok->read_buf->buf + this_copy_len,
+                        cok->read_buf->buf_len - this_copy_len);
+                cok->read_buf->buf_len -= this_copy_len;
+            }
+
+            if(copy_ed >= be_copy) { /// not empty
+                cok->total_buf_len -= copy_ed;
+
+                if(cok->buf_read_len == -1) { /// read line , cut the \r \n
+                    if(buf2lua[be_copy - 1] == '\n') {
+                        be_copy -= 1;
+                    }
+
+                    if(buf2lua[be_copy - 1] == '\r') {
+                        be_copy -= 1;
+                    }
+                }
+
+                lua_pushlstring(cok->L, buf2lua, be_copy);
+                free(buf2lua);
+                return 1;
+
+            } else {
+                bf = cok->read_buf;
+                cok->read_buf = cok->read_buf->next;
+
+                if(cok->last_buf == bf) {
+                    cok->last_buf = NULL;
+                    cok->read_buf = NULL;
+                }
+
+                free(bf->buf);
+                free(bf);
+            }
+        }
+        free(buf2lua);
+    }
+
+    return 0;
+}
+
+int cosocket_be_popen_read(se_ptr_t *ptr)
+{
+    cosocket_t *cok = ptr->data;
+    int n = 0, ret = 0;
+
+init_read_buf:
+
+    if(!cok->read_buf
+       || (cok->last_buf->buf_len >= cok->last_buf->buf_size)) {    /// init read buf
+        cosocket_link_buf_t *nbuf = NULL;
+        nbuf = malloc(sizeof(cosocket_link_buf_t));
+
+        if(nbuf == NULL) {
+            LOGF(ERR, "malloc error @%s:%d\n", __FILE__, __LINE__);
+            exit(1);
+        }
+
+        nbuf->buf = large_malloc(4096);
+
+        if(!nbuf->buf) {
+            LOGF(ERR, "malloc error @%s:%d\n", __FILE__, __LINE__);
+            exit(1);
+        }
+
+        nbuf->buf_size = 4096;
+        nbuf->buf_len = 0;
+        nbuf->next = NULL;
+
+        if(cok->read_buf) {
+            cok->last_buf->next = nbuf;
+
+        } else {
+            cok->read_buf = nbuf;
+        }
+
+        cok->last_buf = nbuf;
+    }
+
+    while((n = read(cok->fd, cok->last_buf->buf + cok->last_buf->buf_len, cok->last_buf->buf_size - cok->last_buf->buf_len)) > 0) {
+        cok->last_buf->buf_len += n;
+        cok->total_buf_len += n;
+        if(cok->last_buf->buf_len >= cok->last_buf->buf_size) {
+            goto init_read_buf;
+        }
+    }
+
+    if(n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
+        int rfd = cok->fd;
+        /// socket closed
+        delete_timeout(cok->timeout_ptr);
+        cok->timeout_ptr = NULL;
+        {
+            cok->status = 0;
+
+            se_delete(cok->ptr);
+            cok->ptr = NULL;
+            pclose(cok->fp);
+            cok->fd = -1;
+            cok->status = 0;
+        }
+
+        if(cok->in_read_action == 1) {
+            cok->in_read_action = 0;
+            int rt = lua_co_popen_read_(cok);
+            cok->inuse = 0;
+
+            if(rt > 0) {
+                ret = lua_f_lua_uthread_resume_in_c(cok->L, rt);
+
+            } else if(n == 0) {
+                lua_pushnil(cok->L);
+                ret = lua_f_lua_uthread_resume_in_c(cok->L, 1);
+            }
+
+            if(ret == LUA_ERRRUN) {
+                se_delete(cok->ptr);
+                cok->ptr = NULL;
+                pclose(cok->fp);
+                cok->fd = -1;
+                cok->status = 0;
+            }
+        }
+
+    } else {
+        if(cok->in_read_action == 1) {
+            int rt = lua_co_popen_read_(cok);
+
+            if(rt > 0) {
+                cok->in_read_action = 0;
+                delete_timeout(cok->timeout_ptr);
+                cok->timeout_ptr = NULL;
+                cok->inuse = 0;
+
+                ret = lua_f_lua_uthread_resume_in_c(cok->L, rt);
+
+                if(ret == LUA_ERRRUN) {
+                    se_delete(cok->ptr);
+                    cok->ptr = NULL;
+                    pclose(cok->fp);
+                    cok->fd = -1;
+                    cok->status = 0;
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int lua_co_popen_read(lua_State *L)
+{
+    cosocket_t *cok = NULL;
+    {
+        if(!lua_isuserdata(L, 1)) {
+            lua_pushnil(L);
+            lua_pushstring(L, "Error params!");
+            return 2;
+        }
+
+        cok = (cosocket_t *) lua_touserdata(L, 1);
+
+        if((cok->status != 2 || cok->fd == -1 || !cok->ptr) && cok->total_buf_len < 1) {
+            lua_pushnil(L);
+            lua_pushfstring(L, "Not connected!");
+            return 2;
+        }
+
+        if(cok->inuse == 1) {
+            lua_pushnil(L);
+            lua_pushstring(L, "socket busy!");
+            return 2;
+        }
+
+        cok->L = L;
+        cok->buf_read_len = -1; /// read line
+
+        if(lua_isnumber(L, 2)) {
+            cok->buf_read_len = lua_tonumber(L, 2);
+
+            if(cok->buf_read_len < 0) {
+                cok->buf_read_len = 0;
+                lua_pushnil(L);
+                lua_pushstring(L, "Error params!");
+                return 2;
+            }
+
+        } else {
+            if(lua_isstring(L, 2)) {
+                if(strcmp("*a", lua_tostring(L, 2)) == 0) {
+                    cok->buf_read_len = -2;    /// read all
+                }
+            }
+        }
+        int rt = lua_co_popen_read_(cok);
+        if(rt > 0) {
+            return rt; // has buf
+        }
+        if(cok->fd == -1) {
+            lua_pushnil(L);
+            lua_pushstring(L, "Not connected!");
+            return 2;
+        }
+        if(cok->in_read_action != 1) {
+            cok->in_read_action = 1;
+
+            if(se_be_read(cok->ptr, cosocket_be_popen_read) == -1) {
+                pclose(cok->fp);
+                cok->fd = -1;
+
+                lua_pushnil(L);
+                lua_pushstring(L, "Network Error!");
+                return 2;
+            }
+
+        }
+
+        cok->timeout_ptr = add_timeout(cok, cok->timeout, popen_timeout_handle);
+    }
+    cok->inuse = 1;
+    return lua_yield(L, 0);
+}
+
+static int lua_co_popen(lua_State *L)
+{
+    if(lua_gettop(L) < 1){
+        lua_pushnil(L);
+        lua_pushstring(L, "Error params!");
+        return 2;
+    }
+
+    const char* cmd = lua_tostring(L, 1);
+    FILE * fp = popen(cmd, "r");
+    if(!fp){
+        lua_pushnil(L);
+        lua_pushstring(L, "popen error!");
+        return 2;
+    }
+
+    cosocket_t *cok = (cosocket_t *) lua_newuserdata(L, sizeof(cosocket_t));
+    if(!cok) {
+        lua_pushnil(L);
+        lua_pushstring(L, "stack error!");
+        return 2;
+    }
+    bzero(cok, sizeof(cosocket_t));
+
+    cok->fp = fp;
+
+    cok->L = L;
+
+    cok->fd = fileno(fp);
+    se_set_nonblocking(cok->fd , 1);
+    cok->ptr = se_add(_loop_fd, cok->fd, cok);
+    se_be_pri(cok->ptr, NULL);
+    cok->status = 2;
+    cok->ssl = 0;
+    cok->in_read_action = 0;
+    cok->inuse = 0;
+
+    cok->timeout = 30000;
+    cok->read_buf = NULL;
+    cok->last_buf = NULL;
+    cok->total_buf_len = 0;
+    cok->buf_read_len = 0;
+    luaL_getmetatable(L, "cosocket:popen");
+    lua_setmetatable(L, -2);
+
+    return 1;
+}
+static int lua_co_popen_close(lua_State *L)
+{
+    if(!lua_isuserdata(L, 1)) {
+        lua_pushnil(L);
+        lua_pushstring(L, "Error params!");
+        return 2;
+    }
+    cosocket_t *cok = (cosocket_t *) lua_touserdata(L, 1);
+
+    if(cok->status != 2) {
+        lua_pushnil(L);
+        lua_pushstring(L, "Not connected!");
+        return 2;
+    }
+
+    if(cok->inuse == 1) {
+        lua_pushnil(L);
+        lua_pushstring(L, "socket busy!");
+        return 2;
+    }
+    if(cok->fd > -1){
+        se_delete(cok->ptr);
+        cok->ptr = NULL;
+
+        pclose(cok->fp);
+        cok->fd = -1;
+    }
+
+    _lua_co_close(L, cok);
+    return 0;
+}
+
+static int lua_co_popen_gc(lua_State *L)
+{
+    cosocket_t *cok = (cosocket_t *) lua_touserdata(L, 1);
+
+    if(!lua_isuserdata(L, 1)) {
+        lua_pushnil(L);
+        lua_pushstring(L, "Error params!");
+        return 2;
+    }
+
+    if(cok->status != 2) {
+        lua_pushnil(L);
+        lua_pushstring(L, "Not connected!");
+        return 2;
+    }
+
+    if(cok->inuse == 1) {
+        lua_pushnil(L);
+        lua_pushstring(L, "socket busy!");
+        return 2;
+    }
+
+    if(cok->fd > -1){
+        se_delete(cok->ptr);
+        cok->ptr = NULL;
+        pclose(cok->fp);
+        cok->fd = -1;
+    }
+
+    _lua_co_close(L, cok);
+
+    return 0;
+}
+static const luaL_reg M_POPEN[] = {
+    {"read", lua_co_popen_read},
+    {"settimeout", lua_co_settimeout},
+
+    {"close", lua_co_popen_close},
+    {"__gc", lua_co_popen_gc},
+
+    {NULL, NULL}
+};
+
 int swop_counter = 0;
 cosocket_swop_t *swop_top = NULL;
 cosocket_swop_t *swop_lat = NULL;
@@ -1416,6 +1905,7 @@ static int _do_other_jobs()
 static const struct luaL_reg cosocket_methods[] = {
     { "tcp", lua_co_tcp },
     { "udp", lua_co_udp },
+    { "popen", lua_co_popen },
     { NULL, NULL }
 };
 
@@ -1529,6 +2019,13 @@ newco = newthread ");
     luaL_newmetatable(L, "cosocket:udp");
     lua_pushvalue(L, lua_upvalueindex(1));
     setfuncs(L, M_UDP, 1);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    lua_pop(L, 1);
+
+    luaL_newmetatable(L, "cosocket:popen");
+    lua_pushvalue(L, lua_upvalueindex(1));
+    setfuncs(L, M_POPEN, 1);
     lua_pushvalue(L, -1);
     lua_setfield(L, -2, "__index");
     lua_pop(L, 1);

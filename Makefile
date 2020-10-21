@@ -1,15 +1,15 @@
 MODNAME= coevent
 CC = gcc -g -ggdb
-CFLAGS = -lssl -lcrypto -lm -lpthread -lz
+CFLAGS = -lm -lpthread -lz
 
-INCLUDES=-I/usr/local/include -I/usr/local/include/luajit-2.0 -I/usr/local/include/luajit-2.1
+INCLUDES=-I/usr/local/include/luajit-2.0 -I/usr/local/include/luajit-2.1 -I$(PWD)/openssl-1.1.1g/include -I/usr/local/include
 
 ifeq ($(LUAJIT),)
 	ifeq ($(LUA),)
-	LIBLUA = -llua -L/usr/lib
+	LIBLUA = -llua -L/usr/lib $(INCLUDES)
 	LUABIN = /usr/local/bin/lua
 	else
-	LIBLUA = -L$(LUA) -llua -Wl,-rpath,$(LUA) -I$(LUA)/../include
+	LIBLUA = -L$(LUA) -llua -Wl,-rpath,$(LUA) $(INCLUDES)
 	endif
 
 	ifneq ("$(wildcard $(LUA)/lua)","")
@@ -20,16 +20,16 @@ ifeq ($(LUAJIT),)
 	endif
 else
 	ifneq (,$(wildcard $(LUAJIT)/libluajit.a))
-	LIBLUA = $(LUAJIT)/libluajit.a -I$(LUAJIT)
+	LIBLUA = $(LUAJIT)/libluajit.a $(INCLUDES)
 	INCLUDES=-I$(LUAJIT)
 	else ifneq (,$(wildcard $(LUAJIT)/src/libluajit.a))
-	LIBLUA = $(LUAJIT)/src/libluajit.a -I$(LUAJIT)/src
+	LIBLUA = $(LUAJIT)/src/libluajit.a $(INCLUDES)
 	INCLUDES=-I$(LUAJIT)/src
 	else ifneq (,$(wildcard $(LUAJIT)/lib/libluajit-5.1.a))
-	LIBLUA = $(LUAJIT)/lib/libluajit-5.1.a -I$(LUAJIT)/include/luajit-2.0
+	LIBLUA = $(LUAJIT)/lib/libluajit-5.1.a $(INCLUDES)
 	INCLUDES=-I$(LUAJIT)/include/luajit-2.0
 	else
-	LIBLUA = -L$(LUAJIT) -lluajit-5.1 -Wl,-rpath,$(LUAJIT) -I$(LUAJIT)/../include/luajit-2.0 -I$(LUAJIT)/../include/luajit-2.1 -I$(LUAJIT)
+	LIBLUA = -L$(LUAJIT) -lluajit-5.1 -Wl,-rpath,$(LUAJIT) $(INCLUDES)
 	endif
 
 	ifneq ("$(wildcard $(LUAJIT)/luajit)","")
@@ -48,9 +48,14 @@ else
 endif
 
 all:$(MODNAME).o
-	$(CC) -o $(MODNAME).so -shared -fPIC $(LIBLUA) objs/*.o $(CFLAGS)
+	$(CC) -shared -fPIC $(LIBLUA) $(CFLAGS) objs/*.o $(PWD)/openssl-1.1.1g/libssl.a $(PWD)/openssl-1.1.1g/libcrypto.a -o $(MODNAME).so
 
 $(MODNAME).o:
+	[ -d openssl-1.1.1g ] || mkdir openssl-1.1.1g;
+	[ -f openssl-1.1.1g.tar.gz ] || (wget https://www.openssl.org/source/openssl-1.1.1g.tar.gz && tar zxf openssl-1.1.1g.tar.gz);
+	[ -f openssl-1.1.1g/INSTALL ] || (tar zxf openssl-1.1.1g.tar.gz);
+	[ -f openssl-1.1.1g/libcrypto.a ] || (cd openssl-1.1.1g && ./config && make && cd ../)
+
 	[ -f merry/merry.h ] || (git submodule init && git submodule update)
 	[ -d objs ] || mkdir objs;
 	cd objs && $(CC) -fPIC -c ../merry/common/*.c;
@@ -80,3 +85,4 @@ install:
 clean:
 	-rm *.so;
 	-rm -r objs;
+	-rm -rf openssl-1.1.1g
